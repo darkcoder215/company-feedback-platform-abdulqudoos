@@ -118,6 +118,23 @@ function getCellValue(row: unknown[], index: number): string {
   return String(val).trim();
 }
 
+/** Convert Excel serial date number to readable date string (YYYY-MM-DD) */
+function excelDateToString(val: string): string {
+  if (!val) return '';
+  const num = parseFloat(val);
+  // Excel serial dates are typically > 30000 and < 60000 for modern dates
+  if (!isNaN(num) && num > 25000 && num < 70000) {
+    // Excel epoch is 1900-01-01 but has a leap year bug (day 0 = 1899-12-30)
+    const excelEpoch = new Date(1899, 11, 30);
+    const date = new Date(excelEpoch.getTime() + num * 86400000);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return val;
+}
+
 /**
  * Parse Ananas review score cells which may contain "score,comment" format.
  * E.g. "4,الشكل الحالي للمبادرة عندك أحمد رهيب" → { score: 4, comment: "..." }
@@ -195,21 +212,21 @@ function parseEmployees(data: unknown[][]): Employee[] {
       jobTitleEn: getCellValue(row, colMap['jobTitleEn'] ?? -1),
       manager: getCellValue(row, colMap['manager'] ?? -1),
       office: getCellValue(row, colMap['office'] ?? -1),
-      startDate: getCellValue(row, colMap['startDate'] ?? -1),
+      startDate: excelDateToString(getCellValue(row, colMap['startDate'] ?? -1)),
       currentLocation: getCellValue(row, colMap['currentLocation'] ?? -1),
       workType: getCellValue(row, colMap['workType'] ?? -1),
       inProbation: inProbationVal === 'نعم' || inProbationVal === 'TRUE' || inProbationVal === 'true',
-      lastPromotionDate: getCellValue(row, colMap['lastPromotionDate'] ?? -1),
+      lastPromotionDate: excelDateToString(getCellValue(row, colMap['lastPromotionDate'] ?? -1)),
       serviceMonths: parseInt(getCellValue(row, colMap['serviceMonths'] ?? -1)) || 0,
       serviceYears: parseInt(getCellValue(row, colMap['serviceYears'] ?? -1)) || 0,
-      currentContract: getCellValue(row, colMap['currentContract'] ?? -1),
+      currentContract: excelDateToString(getCellValue(row, colMap['currentContract'] ?? -1)),
       contractDaysRemaining: parseInt(getCellValue(row, colMap['contractDaysRemaining'] ?? -1)) || 0,
-      contractEndDate: getCellValue(row, colMap['contractEndDate'] ?? -1),
+      contractEndDate: excelDateToString(getCellValue(row, colMap['contractEndDate'] ?? -1)),
       isLeader: isLeaderVal === 'TRUE' || isLeaderVal === 'true',
       overallRating: getCellValue(row, colMap['overallRating'] ?? -1),
       gender: getCellValue(row, colMap['gender'] ?? -1),
       nationality: getCellValue(row, colMap['nationality'] ?? -1),
-      birthDate: getCellValue(row, colMap['birthDate'] ?? -1),
+      birthDate: excelDateToString(getCellValue(row, colMap['birthDate'] ?? -1)),
       age: parseInt(getCellValue(row, colMap['age'] ?? -1)) || 0,
       phone: getCellValue(row, colMap['phone'] ?? -1),
       workEmail: getCellValue(row, colMap['workEmail'] ?? -1),
@@ -450,7 +467,7 @@ function parseReviews(data: unknown[][]): PerformanceReview[] {
       } : undefined,
       reviewStatus: getCellValue(row, c.reviewStatus),
       season: getCellValue(row, c.season),
-      reviewDate: getCellValue(row, c.reviewDate),
+      reviewDate: excelDateToString(getCellValue(row, c.reviewDate)),
       managerComments: managerComment2 || managerComment1,
       hrComments: getCellValue(row, c.hrComments),
       leadershipPotential: getCellValue(row, c.leadershipPotential),
@@ -460,10 +477,10 @@ function parseReviews(data: unknown[][]): PerformanceReview[] {
       isHrTeam: getCellValue(row, c.isHrTeam) === 'نعم',
       inProbation: getCellValue(row, c.inProbation) === 'نعم',
       reviewType: getCellValue(row, c.reviewType),
-      managerApprovalDate: getCellValue(row, c.managerApprovalDate),
-      hrApprovalDate: getCellValue(row, c.hrApprovalDate),
+      managerApprovalDate: excelDateToString(getCellValue(row, c.managerApprovalDate)),
+      hrApprovalDate: excelDateToString(getCellValue(row, c.hrApprovalDate)),
       rejectionReason: getCellValue(row, c.rejectionReason),
-      reportSentDate: getCellValue(row, c.reportSentDate),
+      reportSentDate: excelDateToString(getCellValue(row, c.reportSentDate)),
       department: getCellValue(row, c.department),
       jobTitle: getCellValue(row, c.jobTitle),
       team: getCellValue(row, c.team),
@@ -473,7 +490,7 @@ function parseReviews(data: unknown[][]): PerformanceReview[] {
       employmentType: getCellValue(row, c.employmentType),
       gender: getCellValue(row, c.gender),
       nationality: getCellValue(row, c.nationality),
-      joinDate: getCellValue(row, c.joinDate),
+      joinDate: excelDateToString(getCellValue(row, c.joinDate)),
       matched: getCellValue(row, c.matched),
     });
   }
