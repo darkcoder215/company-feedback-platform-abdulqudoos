@@ -1,5 +1,6 @@
-import { Employee, Evaluation, PerformanceReview, LeaderEvaluation, PlatformData } from './types';
+import { Employee, Evaluation, PerformanceReview, LeaderEvaluation, PlatformData, CleanedData, UnifiedEmployee } from './types';
 import { calculateAverageScore } from './scoring';
+import { normalizeArabicName } from './data-cleaning';
 
 // ── Types ──
 
@@ -103,6 +104,52 @@ const LEADER_CATEGORIES: { key: keyof LeaderEvaluation; label: string }[] = [
   { key: 'creativity', label: 'الإبداع' },
 ];
 
+function isCleanedData(data: PlatformData): data is CleanedData {
+  return 'unifiedMap' in data && data.unifiedMap instanceof Map;
+}
+
+/** Get evaluations linked to an employee via unified map or fallback to name match */
+function getEmployeeEvaluations(emp: Employee, data: PlatformData): Evaluation[] {
+  if (isCleanedData(data)) {
+    const unified = data.unifiedMap.get(emp.name);
+    if (unified) return unified.evaluations;
+  }
+  return data.evaluations.filter(e => e.employeeName === emp.name || e.employeeName === emp.preferredName);
+}
+
+/** Get reviews linked to an employee via unified map or fallback to name match */
+function getEmployeeReviews(emp: Employee, data: PlatformData): PerformanceReview[] {
+  if (isCleanedData(data)) {
+    const unified = data.unifiedMap.get(emp.name);
+    if (unified) return unified.reviews;
+  }
+  return data.reviews.filter(r => r.employeeName === emp.name || r.employeeName === emp.preferredName);
+}
+
+/** Get leader evaluations for an employee (as evaluatee) */
+function getEmployeeLeaderEvals(emp: Employee, data: PlatformData): LeaderEvaluation[] {
+  if (isCleanedData(data)) {
+    const unified = data.unifiedMap.get(emp.name);
+    if (unified) return unified.leaderEvaluations;
+  }
+  return data.leaders.filter(l => l.leaderName === emp.name || l.leaderName === emp.preferredName);
+}
+
+/** Get department employees and their linked evaluations */
+function getDeptEvaluations(dept: string, data: PlatformData): Evaluation[] {
+  if (isCleanedData(data)) {
+    const evals: Evaluation[] = [];
+    for (const [, unified] of data.unifiedMap) {
+      if (unified.department === dept) {
+        evals.push(...unified.evaluations);
+      }
+    }
+    return evals;
+  }
+  const deptEmps = new Set(data.employees.filter(e => e.department === dept).map(e => e.name));
+  return data.evaluations.filter(e => deptEmps.has(e.employeeName));
+}
+
 function getDepartments(data: PlatformData): string[] {
   const depts = new Set<string>();
   data.employees.forEach(e => { if (e.department) depts.add(e.department); });
@@ -159,14 +206,11 @@ export function computeOrgHealth(data: PlatformData): OrgHealth {
   const departments = getDepartments(data);
   const byDepartment = departments.map(dept => {
     const deptEmps = data.employees.filter(e => e.department === dept);
-    const deptEvals = data.evaluations.filter(e => {
-      const emp = deptEmps.find(emp => emp.name === e.employeeName || emp.preferredName === e.employeeName);
-      return !!emp;
-    });
+    const deptEvals = getDeptEvaluations(dept, data);
     const deptReviews = data.reviews.filter(r => r.department === dept);
-    const deptLeaders = data.leaders.filter(l => {
-      const emp = deptEmps.find(emp => emp.name === l.leaderName || emp.preferredName === l.leaderName);
-      return !!emp;
+    const deptLeaders: LeaderEvaluation[] = [];
+    deptEmps.forEach(emp => {
+      deptLeaders.push(...getEmployeeLeaderEvals(emp, data));
     });
     const c = computeHealthComponents(deptEmps, deptEvals, deptReviews, deptLeaders);
     return { name: dept, score: computeComposite(c) };
@@ -193,7 +237,8 @@ export function computeTalentRisk(data: PlatformData): TalentRisk {
     }
 
     // Retain employee risk
-    const review = data.reviews.find(r => r.employeeName === emp.name || r.employeeName === emp.preferredName);
+    const empReviews = getEmployeeReviews(emp, data);
+    const review = empReviews[0];
     if (review) {
       const retain = (review.retainEmployee || '').trim().toLowerCase();
       if (retain === '❌' || retain === 'لا' || retain === 'no') {
@@ -206,11 +251,11 @@ export function computeTalentRisk(data: PlatformData): TalentRisk {
         score += 25;
         factors.push('درب حمر/خطر');
       }
-      // Traffic light
     }
 
     // Evaluation risk
-    const evaluation = data.evaluations.find(e => e.employeeName === emp.name || e.employeeName === emp.preferredName);
+    const empEvals = getEmployeeEvaluations(emp, data);
+    const evaluation = empEvals[0];
     if (evaluation) {
       if (evaluation.finalDecision && evaluation.finalDecision.includes('عدم الاستمرار')) {
         score += 35;
@@ -250,8 +295,7 @@ export function generateRecommendations(data: PlatformData): Recommendation[] {
 
   // 1. Dept probation failure > 30%
   departments.forEach(dept => {
-    const deptEmps = new Set(data.employees.filter(e => e.department === dept).map(e => e.name));
-    const deptEvals = data.evaluations.filter(e => deptEmps.has(e.employeeName));
+    const deptEvals = getDeptEvaluations(dept, data);
     const confirmed = deptEvals.filter(e => e.finalDecision && e.finalDecision.includes('الترسيم')).length;
     const terminated = deptEvals.filter(e => e.finalDecision && e.finalDecision.includes('عدم الاستمرار')).length;
     const total = confirmed + terminated;
@@ -408,7 +452,16 @@ export function generateRecommendations(data: PlatformData): Recommendation[] {
 }
 
 export function computeOnboardingPipeline(data: PlatformData): OnboardingPipeline {
-  const totalEmployees = data.employees.filter(e => e.inProbation || data.evaluations.some(ev => ev.employeeName === e.name || ev.employeeName === e.preferredName)).length || data.evaluations.length;
+  let totalEmployees: number;
+  if (isCleanedData(data)) {
+    let count = 0;
+    for (const [, u] of data.unifiedMap) {
+      if (u.inProbation || u.evaluations.length > 0) count++;
+    }
+    totalEmployees = count || data.evaluations.length;
+  } else {
+    totalEmployees = data.employees.filter(e => e.inProbation || data.evaluations.some(ev => ev.employeeName === e.name || ev.employeeName === e.preferredName)).length || data.evaluations.length;
+  }
 
   const firstImpressions = data.evaluations.filter(e => e.evaluationType === 'first_impression');
   const decisionStation = data.evaluations.filter(e => e.evaluationType === 'decision_station');
@@ -426,8 +479,7 @@ export function computeOnboardingPipeline(data: PlatformData): OnboardingPipelin
 
   const departments = getDepartments(data);
   const byDepartment = departments.map(dept => {
-    const deptEmps = new Set(data.employees.filter(e => e.department === dept).map(e => e.name));
-    const deptEvals = data.evaluations.filter(e => deptEmps.has(e.employeeName));
+    const deptEvals = getDeptEvaluations(dept, data);
     const deptConfirmed = deptEvals.filter(e => e.finalDecision && e.finalDecision.includes('الترسيم')).length;
     const deptTerminated = deptEvals.filter(e => e.finalDecision && e.finalDecision.includes('عدم الاستمرار')).length;
     const deptTotal = deptConfirmed + deptTerminated;
@@ -462,20 +514,46 @@ export function computeLeadershipEffectiveness(
   employees: Employee[],
   leaders: LeaderEvaluation[],
   reviews: PerformanceReview[],
+  data?: PlatformData,
 ): LeadershipEffectiveness {
   const leaderNames = [...new Set(leaders.map(l => l.leaderName))];
+
+  // Build normalized manager lookup for fuzzy team matching
+  const normalizedManagerMap = new Map<string, Employee[]>();
+  for (const emp of employees) {
+    if (emp.manager) {
+      const normManager = normalizeArabicName(emp.manager);
+      if (!normalizedManagerMap.has(normManager)) normalizedManagerMap.set(normManager, []);
+      normalizedManagerMap.get(normManager)!.push(emp);
+    }
+  }
 
   const ranking: LeaderRanking[] = leaderNames.map(name => {
     const evals = leaders.filter(l => l.leaderName === name);
     const score360 = calculateAverageScore(evals.map(e => e.averageScore));
 
-    // Match team via employee.manager === leaderName
-    const teamMembers = employees.filter(e => e.manager === name);
-    const teamNames = new Set(teamMembers.map(e => e.name));
-    // Also add preferred names
-    teamMembers.forEach(e => { if (e.preferredName) teamNames.add(e.preferredName); });
+    // Match team via normalized manager name
+    const normName = normalizeArabicName(name);
+    const teamMembers = normalizedManagerMap.get(normName) || [];
+    // Fallback: exact match
+    if (teamMembers.length === 0) {
+      const exact = employees.filter(e => e.manager === name);
+      teamMembers.push(...exact);
+    }
 
-    const teamReviews = reviews.filter(r => teamNames.has(r.employeeName));
+    // Get reviews for team using unified map if available
+    let teamReviews: PerformanceReview[] = [];
+    if (data && isCleanedData(data)) {
+      for (const member of teamMembers) {
+        const unified = data.unifiedMap.get(member.name);
+        if (unified) teamReviews.push(...unified.reviews);
+      }
+    } else {
+      const teamNames = new Set(teamMembers.map(e => e.name));
+      teamMembers.forEach(e => { if (e.preferredName) teamNames.add(e.preferredName); });
+      teamReviews = reviews.filter(r => teamNames.has(r.employeeName));
+    }
+
     const teamPerfScores = teamReviews.map(r => {
       const vals = Object.values(r.performanceScores).filter(v => typeof v === 'number' && v > 0);
       return vals.length > 0 ? calculateAverageScore(vals) : 0;

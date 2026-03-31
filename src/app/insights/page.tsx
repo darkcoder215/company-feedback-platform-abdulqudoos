@@ -76,22 +76,79 @@ function getHeatmapColor(score: number): string {
 }
 
 export default function InsightsPage() {
-  const { data } = useData();
+  const { data, cleanedData, qualityReport } = useData();
+  const activeData = cleanedData || data;
 
-  const health = useMemo(() => computeOrgHealth(data), [data]);
-  const risk = useMemo(() => computeTalentRisk(data), [data]);
-  const recommendations = useMemo(() => generateRecommendations(data), [data]);
-  const pipeline = useMemo(() => computeOnboardingPipeline(data), [data]);
-  const leadership = useMemo(() => computeLeadershipEffectiveness(data.employees, data.leaders, data.reviews), [data]);
-  const skills = useMemo(() => computeSkillGaps(data.reviews), [data]);
-  const calibration = useMemo(() => computeManagerCalibration(data.reviews, data.evaluations), [data]);
-  const composition = useMemo(() => computeWorkforceComposition(data.employees), [data]);
+  const health = useMemo(() => computeOrgHealth(activeData), [activeData]);
+  const risk = useMemo(() => computeTalentRisk(activeData), [activeData]);
+  const recommendations = useMemo(() => generateRecommendations(activeData), [activeData]);
+  const pipeline = useMemo(() => computeOnboardingPipeline(activeData), [activeData]);
+  const leadership = useMemo(() => computeLeadershipEffectiveness(activeData.employees, activeData.leaders, activeData.reviews, activeData), [activeData]);
+  const skills = useMemo(() => computeSkillGaps(activeData.reviews), [activeData]);
+  const calibration = useMemo(() => computeManagerCalibration(activeData.reviews, activeData.evaluations), [activeData]);
+  const composition = useMemo(() => computeWorkforceComposition(activeData.employees), [activeData]);
 
   return (
     <div className="min-h-screen bg-neutral-cream" dir="rtl">
       <TopBar title="الرؤى الاستراتيجية" />
 
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+
+        {/* ── 0. Data Quality Summary ── */}
+        {qualityReport && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-neutral-cream"
+          >
+            <SectionHeader icon={Shield} title="جودة البيانات" subtitle="نتائج تنظيف وتوحيد البيانات" color="#0072F9" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-neutral-cream rounded-xl p-4 text-center">
+                <p className="font-display font-black text-[28px] text-brand-blue">{qualityReport.totalEmployees}</p>
+                <p className="font-ui font-bold text-[12px] text-neutral-muted">موظف</p>
+              </div>
+              <div className="bg-neutral-cream rounded-xl p-4 text-center">
+                <p className="font-display font-black text-[28px] text-brand-green">
+                  {qualityReport.totalEvaluations > 0 ? Math.round((qualityReport.matchedEvaluations / qualityReport.totalEvaluations) * 100) : 0}%
+                </p>
+                <p className="font-ui font-bold text-[12px] text-neutral-muted">
+                  تطابق التقييمات ({qualityReport.matchedEvaluations}/{qualityReport.totalEvaluations})
+                </p>
+              </div>
+              <div className="bg-neutral-cream rounded-xl p-4 text-center">
+                <p className="font-display font-black text-[28px] text-brand-green">
+                  {qualityReport.totalReviews > 0 ? Math.round((qualityReport.matchedReviews / qualityReport.totalReviews) * 100) : 0}%
+                </p>
+                <p className="font-ui font-bold text-[12px] text-neutral-muted">
+                  تطابق مراجعات الأداء ({qualityReport.matchedReviews}/{qualityReport.totalReviews})
+                </p>
+              </div>
+              <div className="bg-neutral-cream rounded-xl p-4 text-center">
+                <p className="font-display font-black text-[28px] text-brand-green">
+                  {qualityReport.totalLeaders > 0 ? Math.round((qualityReport.matchedLeaders / qualityReport.totalLeaders) * 100) : 0}%
+                </p>
+                <p className="font-ui font-bold text-[12px] text-neutral-muted">
+                  تطابق تقييمات القيادة ({qualityReport.matchedLeaders}/{qualityReport.totalLeaders})
+                </p>
+              </div>
+            </div>
+            {(qualityReport.garbageRemoved > 0 || qualityReport.duplicatesRemoved > 0) && (
+              <div className="mt-4 flex gap-4">
+                {qualityReport.garbageRemoved > 0 && (
+                  <span className="font-ui font-bold text-[12px] bg-red-50 text-red-600 px-3 py-1 rounded-lg">
+                    🗑️ تم حذف {qualityReport.garbageRemoved} سجل غير صالح
+                  </span>
+                )}
+                {qualityReport.duplicatesRemoved > 0 && (
+                  <span className="font-ui font-bold text-[12px] bg-yellow-50 text-yellow-700 px-3 py-1 rounded-lg">
+                    🔄 تم حذف {qualityReport.duplicatesRemoved} سجل مكرر
+                  </span>
+                )}
+              </div>
+            )}
+          </motion.section>
+        )}
 
         {/* ── 1. Org Health Hero ── */}
         <motion.section

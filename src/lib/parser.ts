@@ -267,7 +267,10 @@ function parseEvaluations(data: unknown[][]): Evaluation[] {
 
     const typeText = getCellValue(row, colIdx.evaluationType);
     const isFirstImpression = typeText.includes('الانطباع الأول') || typeText.includes('الأسبوعين');
-    const evaluationType = isFirstImpression ? 'first_impression' as const : 'decision_station' as const;
+    const isMidpoint = typeText.includes('منتصف') || typeText.includes('المنتصف');
+    const evaluationType = isFirstImpression ? 'first_impression' as const
+      : isMidpoint ? 'midpoint' as const
+      : 'decision_station' as const;
 
     const trafficLightText = getCellValue(row, colIdx.trafficLight);
     const { score: trafficLightScore, label: trafficLightLabel } = parseTrafficLight(trafficLightText);
@@ -304,20 +307,35 @@ function parseEvaluations(data: unknown[][]): Evaluation[] {
         toolIntegration: parseScoreFromText(getCellValue(row, colIdx.fi_toolIntegration)),
         overallImpression: parseScoreFromText(getCellValue(row, colIdx.fi_overallImpression)),
       };
+    } else if (isMidpoint) {
+      evaluation.midpointScores = {
+        performance: parseScoreFromText(getCellValue(row, colIdx.mp_performance)),
+        independence: parseScoreFromText(getCellValue(row, colIdx.mp_independence)),
+        learning: parseScoreFromText(getCellValue(row, colIdx.mp_learning)),
+        interaction: parseScoreFromText(getCellValue(row, colIdx.mp_interaction)),
+        commitment: parseScoreFromText(getCellValue(row, colIdx.mp_commitment)),
+        values: parseScoreFromText(getCellValue(row, colIdx.mp_values)),
+      };
+      // Backward compat: also populate decisionStationScores for consumers that don't know about midpoint
+      evaluation.decisionStationScores = {
+        performance: evaluation.midpointScores.performance,
+        independence: evaluation.midpointScores.independence,
+        commitment: evaluation.midpointScores.commitment,
+        collaboration: evaluation.midpointScores.interaction,
+        values: evaluation.midpointScores.values,
+        learningResponse: evaluation.midpointScores.learning,
+        responsibility: 0,
+        impact: 0,
+        readiness: 0,
+      };
     } else {
       evaluation.decisionStationScores = {
-        performance: parseScoreFromText(getCellValue(row, colIdx.ds_performance)) ||
-                     parseScoreFromText(getCellValue(row, colIdx.mp_performance)),
-        independence: parseScoreFromText(getCellValue(row, colIdx.ds_independence)) ||
-                      parseScoreFromText(getCellValue(row, colIdx.mp_independence)),
-        commitment: parseScoreFromText(getCellValue(row, colIdx.ds_commitment)) ||
-                    parseScoreFromText(getCellValue(row, colIdx.mp_commitment)),
-        collaboration: parseScoreFromText(getCellValue(row, colIdx.ds_collaboration)) ||
-                       parseScoreFromText(getCellValue(row, colIdx.mp_interaction)),
-        values: parseScoreFromText(getCellValue(row, colIdx.ds_values)) ||
-                parseScoreFromText(getCellValue(row, colIdx.mp_values)),
-        learningResponse: parseScoreFromText(getCellValue(row, colIdx.ds_learningResponse)) ||
-                          parseScoreFromText(getCellValue(row, colIdx.mp_learning)),
+        performance: parseScoreFromText(getCellValue(row, colIdx.ds_performance)),
+        independence: parseScoreFromText(getCellValue(row, colIdx.ds_independence)),
+        commitment: parseScoreFromText(getCellValue(row, colIdx.ds_commitment)),
+        collaboration: parseScoreFromText(getCellValue(row, colIdx.ds_collaboration)),
+        values: parseScoreFromText(getCellValue(row, colIdx.ds_values)),
+        learningResponse: parseScoreFromText(getCellValue(row, colIdx.ds_learningResponse)),
         responsibility: parseScoreFromText(getCellValue(row, colIdx.ds_responsibility)),
         impact: parseScoreFromText(getCellValue(row, colIdx.ds_impact)),
         readiness: parseScoreFromText(getCellValue(row, colIdx.ds_readiness)),

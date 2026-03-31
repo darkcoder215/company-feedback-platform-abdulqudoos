@@ -1,11 +1,14 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { PlatformData } from '@/lib/types';
+import { PlatformData, CleanedData, DataQualityReport } from '@/lib/types';
 import { parseFile, parseBuffer } from '@/lib/parser';
+import { cleanPlatformData } from '@/lib/data-cleaning';
 
 interface DataContextType {
   data: PlatformData;
+  cleanedData: CleanedData | null;
+  qualityReport: DataQualityReport | null;
   isLoading: boolean;
   error: string | null;
   uploadFile: (file: File) => Promise<{ type: string; count: number }>;
@@ -24,6 +27,8 @@ const DATA_FILES = [
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<PlatformData>({ employees: [], evaluations: [], reviews: [], leaders: [] });
+  const [cleanedData, setCleanedData] = useState<CleanedData | null>(null);
+  const [qualityReport, setQualityReport] = useState<DataQualityReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +69,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     loadStaticData();
     return () => { cancelled = true; };
   }, []);
+
+  // Re-run cleaning pipeline when data changes (e.g., after file upload)
+  useEffect(() => {
+    if (data.employees.length > 0 || data.evaluations.length > 0) {
+      const cleaned = cleanPlatformData(data);
+      setCleanedData(cleaned);
+      setQualityReport(cleaned.qualityReport);
+    }
+  }, [data]);
 
   const uploadFile = useCallback(async (file: File) => {
     setIsLoading(true);
@@ -106,13 +120,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const clearData = useCallback(() => {
     setData({ employees: [], evaluations: [], reviews: [], leaders: [] });
+    setCleanedData(null);
+    setQualityReport(null);
     setError(null);
   }, []);
 
   const hasData = data.employees.length > 0 || data.evaluations.length > 0 || data.reviews.length > 0 || data.leaders.length > 0;
 
   return (
-    <DataContext.Provider value={{ data, isLoading, error, uploadFile, clearData, hasData }}>
+    <DataContext.Provider value={{ data, cleanedData, qualityReport, isLoading, error, uploadFile, clearData, hasData }}>
       {children}
     </DataContext.Provider>
   );

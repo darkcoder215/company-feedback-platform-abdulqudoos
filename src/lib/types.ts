@@ -30,7 +30,7 @@ export interface Employee {
   personalEmail: string;
 }
 
-export type EvaluationType = 'first_impression' | 'decision_station';
+export type EvaluationType = 'first_impression' | 'midpoint' | 'decision_station';
 
 export interface FirstImpressionScores {
   interaction: number;
@@ -53,6 +53,15 @@ export interface DecisionStationScores {
   readiness: number;
 }
 
+export interface MidpointScores {
+  performance: number;
+  independence: number;
+  learning: number;
+  interaction: number;
+  commitment: number;
+  values: number;
+}
+
 export interface Evaluation {
   id: string;
   submissionId: string;
@@ -61,6 +70,7 @@ export interface Evaluation {
   evaluatorName: string;
   employeeName: string;
   firstImpressionScores?: FirstImpressionScores;
+  midpointScores?: MidpointScores;
   decisionStationScores?: DecisionStationScores;
   previousTargets: string;
   nextTargets: string;
@@ -229,6 +239,36 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   manager: 'مدير',
   viewer: 'مشاهد',
 };
+
+// ── Unified / Cleaned Data ──
+
+export interface UnifiedEmployee extends Employee {
+  evaluations: Evaluation[];
+  reviews: PerformanceReview[];
+  leaderEvaluations: LeaderEvaluation[];       // as evaluatee
+  leaderEvaluationsGiven: LeaderEvaluation[];   // as evaluator
+  matchConfidence: Record<string, number>;       // source → confidence 0-1
+}
+
+export interface DataQualityReport {
+  totalEmployees: number;
+  matchedEvaluations: number;
+  totalEvaluations: number;
+  matchedReviews: number;
+  totalReviews: number;
+  matchedLeaders: number;
+  totalLeaders: number;
+  unmatchedEvaluationNames: string[];
+  unmatchedReviewNames: string[];
+  unmatchedLeaderNames: string[];
+  garbageRemoved: number;
+  duplicatesRemoved: number;
+}
+
+export interface CleanedData extends PlatformData {
+  unifiedMap: Map<string, UnifiedEmployee>;
+  qualityReport: DataQualityReport;
+}
 
 export const ROLE_PERMISSIONS: Record<UserRole, {
   canViewAllEmployees: boolean;
