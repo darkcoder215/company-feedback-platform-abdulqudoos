@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { Employee, Evaluation, PlatformData } from '@/lib/types';
+import { PlatformData } from '@/lib/types';
 import { parseFile } from '@/lib/parser';
 
 interface DataContextType {
@@ -16,7 +16,7 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<PlatformData>({ employees: [], evaluations: [] });
+  const [data, setData] = useState<PlatformData>({ employees: [], evaluations: [], reviews: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +48,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         return { type: 'evaluations', count: result.evaluations.length };
       }
 
+      if (result.type === 'reviews' && result.reviews) {
+        setData(prev => ({
+          ...prev,
+          reviews: [...prev.reviews, ...result.reviews!],
+        }));
+        return { type: 'reviews', count: result.reviews.length };
+      }
+
       setError('لم يتم التعرف على نوع الملف');
       return { type: 'unknown', count: 0 };
     } finally {
@@ -56,11 +64,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const clearData = useCallback(() => {
-    setData({ employees: [], evaluations: [] });
+    setData({ employees: [], evaluations: [], reviews: [] });
     setError(null);
   }, []);
 
-  const hasData = data.employees.length > 0 || data.evaluations.length > 0;
+  const hasData = data.employees.length > 0 || data.evaluations.length > 0 || data.reviews.length > 0;
 
   return (
     <DataContext.Provider value={{ data, isLoading, error, uploadFile, clearData, hasData }}>

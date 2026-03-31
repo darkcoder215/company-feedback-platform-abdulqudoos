@@ -11,6 +11,7 @@ import {
   UserCheck,
   UserX,
   TrendingUp,
+  Star,
 } from 'lucide-react';
 import TopBar from '@/components/layout/TopBar';
 import FileUploader from '@/components/upload/FileUploader';
@@ -107,6 +108,45 @@ export default function DashboardPage() {
                 delay={0.3}
               />
             </div>
+
+            {/* Reviews summary */}
+            {data.reviews.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <StatCard
+                  title="تقييمات الأداء"
+                  value={data.reviews.length}
+                  subtitle="تقييم أناناس"
+                  icon={Star}
+                  color="#00C17A"
+                  delay={0.35}
+                />
+                <StatCard
+                  title="فخر"
+                  value={data.reviews.filter(r => r.generalTrack === 'فخر').length}
+                  icon={Award}
+                  color="#00C17A"
+                  delay={0.4}
+                />
+                <StatCard
+                  title="حمر / خطر"
+                  value={data.reviews.filter(r => r.generalTrack === 'حمر' || r.generalTrack === 'خطر').length}
+                  icon={UserX}
+                  color="#F24935"
+                  delay={0.45}
+                />
+                <StatCard
+                  title="نسبة التمسك"
+                  value={(() => {
+                    const retain = data.reviews.filter(r => r.retainEmployee === '✅' || r.retainEmployee === 'نعم').length;
+                    const noRetain = data.reviews.filter(r => r.retainEmployee === '❌' || r.retainEmployee === 'لا').length;
+                    return retain + noRetain > 0 ? `${Math.round((retain / (retain + noRetain)) * 100)}%` : 'غير متاح';
+                  })()}
+                  icon={TrendingUp}
+                  color="#0072F9"
+                  delay={0.5}
+                />
+              </div>
+            )}
 
             {/* Probation summary */}
             {stats.totalEvaluations > 0 && (

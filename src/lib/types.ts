@@ -75,12 +75,85 @@ export interface Evaluation {
   additionalNotes: string;
 }
 
-export type FileType = 'employees' | 'evaluations' | 'unknown';
+// ── Ananas Performance Reviews ──
+
+export interface PerformanceScores {
+  outputQuality: number;
+  timeDiscipline: number;
+  basecampUsage: number;
+  initiative: number;
+  efficiency: number;
+  dependability: number;
+  professionalDev: number;
+  overallTrack: number;
+}
+
+export interface LeadershipScores {
+  decisionMaking: number;
+  teamBuilding: number;
+  goalSetting: number;
+  teamLeadership: number;
+}
+
+export interface PerformanceScoreComment {
+  score: number;
+  comment: string;
+}
+
+export interface PerformanceReview {
+  id: string;
+  employeeName: string;
+  directLeader: string;
+  managerOfManager: string;
+  employeeNumber: string;
+  reviewNumber: string;
+  station: string;
+  generalTrack: string;
+  generalTrackScore: number;
+  generalTrackPercent: number;
+  leadershipTrack: string;
+  leadershipTrackScore: number;
+  leadershipPercent: number;
+  metExpectations: string;
+  performanceScores: PerformanceScores;
+  performanceComments: Record<string, string>;
+  leadershipScores?: LeadershipScores;
+  reviewStatus: string;
+  season: string;
+  reviewDate: string;
+  managerComments: string;
+  hrComments: string;
+  leadershipPotential: string;
+  retainEmployee: string;
+  employeeEmail: string;
+  isLeader: boolean;
+  isHrTeam: boolean;
+  inProbation: boolean;
+  reviewType: string;
+  managerApprovalDate: string;
+  hrApprovalDate: string;
+  rejectionReason: string;
+  reportSentDate: string;
+  department: string;
+  jobTitle: string;
+  team: string;
+  level: number;
+  office: string;
+  currentLocation: string;
+  employmentType: string;
+  gender: string;
+  nationality: string;
+  joinDate: string;
+  matched: string;
+}
+
+export type FileType = 'employees' | 'evaluations' | 'reviews' | 'unknown';
 
 export interface ParseResult {
   type: FileType;
   employees?: Employee[];
   evaluations?: Evaluation[];
+  reviews?: PerformanceReview[];
   error?: string;
 }
 
@@ -101,4 +174,70 @@ export interface DepartmentStats {
 export interface PlatformData {
   employees: Employee[];
   evaluations: Evaluation[];
+  reviews: PerformanceReview[];
 }
+
+// ── Access Control ──
+
+export type UserRole = 'admin' | 'hr' | 'manager' | 'viewer';
+
+export interface UserSession {
+  name: string;
+  email: string;
+  role: UserRole;
+  department?: string;
+}
+
+export const ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'مدير النظام',
+  hr: 'الموارد البشرية',
+  manager: 'مدير',
+  viewer: 'مشاهد',
+};
+
+export const ROLE_PERMISSIONS: Record<UserRole, {
+  canViewAllEmployees: boolean;
+  canViewReviews: boolean;
+  canViewHrComments: boolean;
+  canViewSalaryInfo: boolean;
+  canUploadData: boolean;
+  canManageAccess: boolean;
+  departmentOnly: boolean;
+}> = {
+  admin: {
+    canViewAllEmployees: true,
+    canViewReviews: true,
+    canViewHrComments: true,
+    canViewSalaryInfo: true,
+    canUploadData: true,
+    canManageAccess: true,
+    departmentOnly: false,
+  },
+  hr: {
+    canViewAllEmployees: true,
+    canViewReviews: true,
+    canViewHrComments: true,
+    canViewSalaryInfo: true,
+    canUploadData: true,
+    canManageAccess: false,
+    departmentOnly: false,
+  },
+  manager: {
+    canViewAllEmployees: false,
+    canViewReviews: true,
+    canViewHrComments: false,
+    canViewSalaryInfo: false,
+    canUploadData: false,
+    canManageAccess: false,
+    departmentOnly: true,
+  },
+  viewer: {
+    canViewAllEmployees: false,
+    canViewReviews: false,
+    canViewHrComments: false,
+    canViewSalaryInfo: false,
+    canUploadData: false,
+    canManageAccess: false,
+    departmentOnly: true,
+  },
+};

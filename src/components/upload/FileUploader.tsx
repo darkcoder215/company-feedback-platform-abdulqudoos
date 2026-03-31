@@ -55,6 +55,7 @@ export default function FileUploader({ onClose }: { onClose?: () => void }) {
     switch (type) {
       case 'employees': return 'بيانات الموظفين';
       case 'evaluations': return 'تقييمات فترة التجربة';
+      case 'reviews': return 'تقييمات الأداء (أناناس)';
       default: return 'غير معروف';
     }
   };

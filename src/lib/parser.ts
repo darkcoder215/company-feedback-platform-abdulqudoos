@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { Employee, Evaluation, FileType, ParseResult } from './types';
+import { Employee, Evaluation, PerformanceReview, FileType, ParseResult } from './types';
 import { parseScoreFromText, parseTrafficLight, parseFinalDecision } from './scoring';
 
 // ── Column mappings ──
@@ -35,13 +35,10 @@ const EMPLOYEE_COLUMN_MAP: Record<string, keyof Employee> = {
   'البريد الشخصي': 'personalEmail',
 };
 
-// Employee detection keywords
 const EMPLOYEE_KEYWORDS = ['الاسم', 'الإدارة', 'الفريق', 'المستوى', 'المسمّى الوظيفي'];
-
-// Evaluation detection keywords
 const EVALUATION_KEYWORDS = ['اسم الموظف', 'النتيجة', 'القرار', 'الانطباع', 'التفاعل والبداية', 'الأداء والجودة'];
+const REVIEW_KEYWORDS = ['الدرب العام', 'درجة_الدرب_العام', 'القائد المباشر', 'درب القيادة', 'كيف جودة المخرجات'];
 
-// Evaluation column indices mapping (based on the provided data structure)
 const EVAL_COLUMNS = {
   submissionId: 'Submission ID',
   respondentId: 'Respondent ID',
@@ -49,14 +46,12 @@ const EVAL_COLUMNS = {
   evaluationType: 'اخـتر الــنوع',
   evaluatorName: 'اسمك',
   employeeName: 'اسم الموظف',
-  // First Impression scores
   fi_interaction: '1. التفاعل والبداية',
   fi_independence: '2. الاستقلالية والتعلم',
   fi_communication: '3. التواصل والتعاون',
   fi_teamIntegration: '4. الاندماج مع الفريق ورفيق البداية',
   fi_toolIntegration: '4. الاندماج في أدوات العمل والتواصل',
   fi_overallImpression: '5. الانطباع العام',
-  // Decision Station scores
   ds_performance: '1. الأداء والجودة',
   ds_independence: '2. الاستقلالية والاعتمادية',
   ds_commitment: '3. الالتزام والانضباط',
@@ -66,14 +61,12 @@ const EVAL_COLUMNS = {
   ds_responsibility: '7. المسؤولية والمبادرة',
   ds_impact: '8. الأثر والإضافة',
   ds_readiness: '9. الجاهزية للمرحلة القادمة',
-  // Mid-period scores (alternative column names)
   mp_performance: '1. التطور في الأداء والمخرجات',
   mp_independence: '2. الاستقلالية والمسؤولية',
   mp_learning: '3. التعلّم والاستجابة للملاحظات',
   mp_interaction: '4. التفاعل والعلاقات داخل الفريق',
   mp_commitment: '5. الالتزام والمسؤولية',
   mp_values: '6. القيم وثقافة ثمانية',
-  // Feedback
   previousTargets: 'المستهدفات السابقة',
   nextTargets: 'المستهدفات القادمة',
   startFeedback: 'ابدأ',
@@ -89,13 +82,16 @@ const EVAL_COLUMNS = {
 function detectFileType(headers: string[]): FileType {
   const headerStr = headers.join(' ');
 
+  // Check for Ananas reviews first (most specific)
+  const reviewMatches = REVIEW_KEYWORDS.filter(kw => headerStr.includes(kw)).length;
+  if (reviewMatches >= 2) return 'reviews';
+
   const employeeMatches = EMPLOYEE_KEYWORDS.filter(kw => headerStr.includes(kw)).length;
   const evalMatches = EVALUATION_KEYWORDS.filter(kw => headerStr.includes(kw)).length;
 
   if (employeeMatches >= 3) return 'employees';
   if (evalMatches >= 2) return 'evaluations';
 
-  // Fallback: check for specific column names
   if (headers.some(h => h && h.includes('الإدارة')) && headers.some(h => h && h.includes('الفريق'))) {
     return 'employees';
   }
@@ -117,12 +113,56 @@ function getCellValue(row: unknown[], index: number): string {
   return String(val).trim();
 }
 
+/**
+ * Parse Ananas review score cells which may contain "score,comment" format.
+ * E.g. "4,الشكل الحالي للمبادرة عندك أحمد رهيب" → { score: 4, comment: "..." }
+ */
+function parseReviewScoreCell(text: string): { score: number; comment: string } {
+  if (!text) return { score: 0, comment: '' };
+  const trimmed = text.trim();
+
+  // Check if it's a plain number
+  const plainNum = parseInt(trimmed);
+  if (!isNaN(plainNum) && String(plainNum) === trimmed) {
+    return { score: plainNum, comment: '' };
+  }
+
+  // Check for "number,comment" format
+  const commaIdx = trimmed.indexOf(',');
+  if (commaIdx > 0 && commaIdx <= 2) {
+    const numPart = trimmed.substring(0, commaIdx).trim();
+    const commentPart = trimmed.substring(commaIdx + 1).trim();
+    const num = parseInt(numPart);
+    if (!isNaN(num) && num >= 0 && num <= 5) {
+      return { score: num, comment: commentPart };
+    }
+  }
+
+  // Try to extract leading number
+  const match = trimmed.match(/^(\d+)/);
+  if (match) {
+    return { score: parseInt(match[1]), comment: trimmed.substring(match[0].length).replace(/^[,\s]+/, '') };
+  }
+
+  return { score: 0, comment: trimmed };
+}
+
+/** Parse the track label to a standard name */
+function parseTrackLabel(text: string): string {
+  if (!text) return '';
+  if (text.includes('فخر')) return 'فخر';
+  if (text.includes('خضر')) return 'خضر';
+  if (text.includes('صفر')) return 'صفر';
+  if (text.includes('حمر')) return 'حمر';
+  if (text.includes('خطر')) return 'خطر';
+  return text;
+}
+
 function parseEmployees(data: unknown[][]): Employee[] {
   if (data.length < 2) return [];
   const headers = data[0].map(h => String(h || '').trim());
   const employees: Employee[] = [];
 
-  // Build column index map
   const colMap: Record<string, number> = {};
   for (const [arabic, english] of Object.entries(EMPLOYEE_COLUMN_MAP)) {
     const idx = findColumnIndex(headers, arabic);
@@ -180,7 +220,6 @@ function parseEvaluations(data: unknown[][]): Evaluation[] {
   const headers = data[0].map(h => String(h || '').trim());
   const evaluations: Evaluation[] = [];
 
-  // Build column index map for evaluations
   const colIdx: Record<string, number> = {};
   for (const [key, search] of Object.entries(EVAL_COLUMNS)) {
     const cleanSearch = search.replace(/[🎯🚀🏁🚦✅⚖️]/g, '').trim();
@@ -192,7 +231,6 @@ function parseEvaluations(data: unknown[][]): Evaluation[] {
     colIdx[key] = idx;
   }
 
-  // Try exact matching for common columns
   if (colIdx.submissionId < 0) colIdx.submissionId = findColumnIndex(headers, 'Submission ID');
   if (colIdx.submittedAt < 0) colIdx.submittedAt = findColumnIndex(headers, 'Submitted at');
   if (colIdx.evaluatorName < 0) colIdx.evaluatorName = findColumnIndex(headers, 'اسمك');
@@ -245,7 +283,6 @@ function parseEvaluations(data: unknown[][]): Evaluation[] {
         overallImpression: parseScoreFromText(getCellValue(row, colIdx.fi_overallImpression)),
       };
     } else {
-      // Decision station - try both direct and mid-period columns
       evaluation.decisionStationScores = {
         performance: parseScoreFromText(getCellValue(row, colIdx.ds_performance)) ||
                      parseScoreFromText(getCellValue(row, colIdx.mp_performance)),
@@ -271,6 +308,174 @@ function parseEvaluations(data: unknown[][]): Evaluation[] {
   return evaluations;
 }
 
+function parseReviews(data: unknown[][]): PerformanceReview[] {
+  if (data.length < 2) return [];
+  const headers = data[0].map(h => String(h || '').trim());
+  const reviews: PerformanceReview[] = [];
+
+  const col = (search: string) => findColumnIndex(headers, search);
+
+  const c = {
+    employeeName: col('اسم الموظف'),
+    directLeader: col('القائد المباشر'),
+    managerOfManager: col('مدير المدير'),
+    employeeNumber: col('رقم_الموظف'),
+    reviewNumber: col('رقم التقييم'),
+    station: col('المحطة'),
+    generalTrack: col('الدرب العام'),
+    generalTrackScore: col('درجة_الدرب_العام'),
+    generalTrackPercent: col('نسبة الدرب العام'),
+    leadershipTrack: col('درب القيادة'),
+    leadershipTrackScore: col('درجة_درب_القيادة'),
+    leadershipPercent: col('نسبة القيادة'),
+    metExpectations: col('حقق التوقعات'),
+    outputQuality: col('كيف جودة المخرجات'),
+    timeDiscipline: col('كيف الإنضباط مع الوقت'),
+    basecampUsage: col('كيفه مع بيسكامب'),
+    initiative: col('كيف حس المبادرة'),
+    efficiency: col('كيف كفاءة الموظف'),
+    dependability: col('كيف تعتمد عليه'),
+    professionalDev: col('كيف تطوره المهني'),
+    overallTrack: col('كيف تقيم درب الموظف'),
+    decisionMaking: col('كيف يتخذ القرارات'),
+    teamBuilding: col('كيف يبني الفريق'),
+    goalSetting: col('كيف يبني الأهداف'),
+    teamLeadership: col('كيف يقود الفريق'),
+    reviewStatus: col('حالة_التقييم'),
+    season: col('الموسم'),
+    reviewDate: col('تاريخ_التقييم'),
+    managerComments1: col('تعليقات_المدير'),
+    managerComments2: col('تعليقات المدير'),
+    hrComments: col('التعليقات للموارد البشرية'),
+    leadershipPotential: col('إمكانية القيادة'),
+    retainEmployee: col('هل تتمسك بالموظف'),
+    employeeEmail: col('بريد الموظف'),
+    isLeader: col('هل هو قائد'),
+    isHrTeam: col('من_فريق_الموارد_البشرية'),
+    inProbation: col('في فترة التجربة'),
+    reviewType: col('نوع_التقييم'),
+    managerApprovalDate: col('تاريخ اعتماد المدير'),
+    hrApprovalDate: col('تاريخ اعتماد الموارد البشرية'),
+    rejectionReason: col('سبب الرفض'),
+    reportSentDate: col('تاريخ ارسال التقرير'),
+    department: col('القسم'),
+    jobTitle: col('المسمى الوظيفي'),
+    team: col('الفريق'),
+    level: col('المستوى'),
+    office: col('المكتب'),
+    currentLocation: col('الموقع الحالي'),
+    employmentType: col('نوع_التوظيف'),
+    gender: col('الجنس'),
+    nationality: col('الجنسية'),
+    joinDate: col('تاريخ_الانضمام'),
+    matched: col('متطابق'),
+  };
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row || row.length === 0) continue;
+
+    const employeeName = getCellValue(row, c.employeeName);
+    if (!employeeName) continue;
+
+    const oq = parseReviewScoreCell(getCellValue(row, c.outputQuality));
+    const td = parseReviewScoreCell(getCellValue(row, c.timeDiscipline));
+    const bu = parseReviewScoreCell(getCellValue(row, c.basecampUsage));
+    const init = parseReviewScoreCell(getCellValue(row, c.initiative));
+    const eff = parseReviewScoreCell(getCellValue(row, c.efficiency));
+    const dep = parseReviewScoreCell(getCellValue(row, c.dependability));
+    const pd = parseReviewScoreCell(getCellValue(row, c.professionalDev));
+    const ot = parseReviewScoreCell(getCellValue(row, c.overallTrack));
+
+    const dm = parseReviewScoreCell(getCellValue(row, c.decisionMaking));
+    const tb = parseReviewScoreCell(getCellValue(row, c.teamBuilding));
+    const gs = parseReviewScoreCell(getCellValue(row, c.goalSetting));
+    const tl = parseReviewScoreCell(getCellValue(row, c.teamLeadership));
+
+    const managerComment1 = getCellValue(row, c.managerComments1);
+    const managerComment2 = getCellValue(row, c.managerComments2);
+
+    const isLeaderVal = getCellValue(row, c.isLeader);
+    const hasLeadershipScores = dm.score > 0 || tb.score > 0 || gs.score > 0 || tl.score > 0;
+
+    reviews.push({
+      id: `rev-${i}`,
+      employeeName,
+      directLeader: getCellValue(row, c.directLeader),
+      managerOfManager: getCellValue(row, c.managerOfManager),
+      employeeNumber: getCellValue(row, c.employeeNumber),
+      reviewNumber: getCellValue(row, c.reviewNumber),
+      station: getCellValue(row, c.station),
+      generalTrack: parseTrackLabel(getCellValue(row, c.generalTrack)),
+      generalTrackScore: parseInt(getCellValue(row, c.generalTrackScore)) || 0,
+      generalTrackPercent: parseFloat(getCellValue(row, c.generalTrackPercent)) || 0,
+      leadershipTrack: parseTrackLabel(getCellValue(row, c.leadershipTrack)),
+      leadershipTrackScore: parseInt(getCellValue(row, c.leadershipTrackScore)) || 0,
+      leadershipPercent: parseFloat(getCellValue(row, c.leadershipPercent)) || 0,
+      metExpectations: getCellValue(row, c.metExpectations),
+      performanceScores: {
+        outputQuality: oq.score,
+        timeDiscipline: td.score,
+        basecampUsage: bu.score,
+        initiative: init.score,
+        efficiency: eff.score,
+        dependability: dep.score,
+        professionalDev: pd.score,
+        overallTrack: ot.score,
+      },
+      performanceComments: {
+        outputQuality: oq.comment,
+        timeDiscipline: td.comment,
+        basecampUsage: bu.comment,
+        initiative: init.comment,
+        efficiency: eff.comment,
+        dependability: dep.comment,
+        professionalDev: pd.comment,
+        overallTrack: ot.comment,
+        decisionMaking: dm.comment,
+        teamBuilding: tb.comment,
+        goalSetting: gs.comment,
+        teamLeadership: tl.comment,
+      },
+      leadershipScores: hasLeadershipScores ? {
+        decisionMaking: dm.score,
+        teamBuilding: tb.score,
+        goalSetting: gs.score,
+        teamLeadership: tl.score,
+      } : undefined,
+      reviewStatus: getCellValue(row, c.reviewStatus),
+      season: getCellValue(row, c.season),
+      reviewDate: getCellValue(row, c.reviewDate),
+      managerComments: managerComment2 || managerComment1,
+      hrComments: getCellValue(row, c.hrComments),
+      leadershipPotential: getCellValue(row, c.leadershipPotential),
+      retainEmployee: getCellValue(row, c.retainEmployee),
+      employeeEmail: getCellValue(row, c.employeeEmail),
+      isLeader: isLeaderVal === 'نعم' || isLeaderVal === 'TRUE' || isLeaderVal === 'true',
+      isHrTeam: getCellValue(row, c.isHrTeam) === 'نعم',
+      inProbation: getCellValue(row, c.inProbation) === 'نعم',
+      reviewType: getCellValue(row, c.reviewType),
+      managerApprovalDate: getCellValue(row, c.managerApprovalDate),
+      hrApprovalDate: getCellValue(row, c.hrApprovalDate),
+      rejectionReason: getCellValue(row, c.rejectionReason),
+      reportSentDate: getCellValue(row, c.reportSentDate),
+      department: getCellValue(row, c.department),
+      jobTitle: getCellValue(row, c.jobTitle),
+      team: getCellValue(row, c.team),
+      level: parseInt(getCellValue(row, c.level)) || 0,
+      office: getCellValue(row, c.office),
+      currentLocation: getCellValue(row, c.currentLocation),
+      employmentType: getCellValue(row, c.employmentType),
+      gender: getCellValue(row, c.gender),
+      nationality: getCellValue(row, c.nationality),
+      joinDate: getCellValue(row, c.joinDate),
+      matched: getCellValue(row, c.matched),
+    });
+  }
+
+  return reviews;
+}
+
 export async function parseFile(file: File): Promise<ParseResult> {
   try {
     const buffer = await file.arrayBuffer();
@@ -290,6 +495,8 @@ export async function parseFile(file: File): Promise<ParseResult> {
         return { type: 'employees', employees: parseEmployees(data) };
       case 'evaluations':
         return { type: 'evaluations', evaluations: parseEvaluations(data) };
+      case 'reviews':
+        return { type: 'reviews', reviews: parseReviews(data) };
       default:
         return { type: 'unknown', error: 'لم يتم التعرف على نوع الملف. تأكد من أن الملف يحتوي على البيانات الصحيحة.' };
     }

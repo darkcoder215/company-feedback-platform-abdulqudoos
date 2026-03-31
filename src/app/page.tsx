@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
-import { BarChart3, Users, ClipboardCheck, Building2, ArrowLeft, Upload } from 'lucide-react';
+import { BarChart3, Users, ClipboardCheck, Building2, ArrowLeft, Upload, Star, Shield } from 'lucide-react';
 import Button from '@/components/ui/Button';
 
 const features = [
@@ -14,16 +14,28 @@ const features = [
     color: '#0072F9',
   },
   {
-    icon: ClipboardCheck,
-    title: 'تحليل فترات التجربة',
-    description: 'تقييم أداء الموظفين خلال الفترة التجريبية بمعايير دقيقة ومفصّلة',
+    icon: Star,
+    title: 'تقييمات الأداء',
+    description: 'تحليل تقييمات أناناس مع درجات الدرب والمعايير التفصيلية وتعليقات المدراء',
     color: '#00C17A',
   },
   {
-    icon: BarChart3,
-    title: 'رؤى وتحليلات',
-    description: 'استخراج الأنماط والرؤى من البيانات لدعم اتخاذ القرار',
+    icon: ClipboardCheck,
+    title: 'فترات التجربة',
+    description: 'تقييم أداء الموظفين خلال الفترة التجريبية بمعايير دقيقة ومفصّلة',
     color: '#FFBC0A',
+  },
+  {
+    icon: Shield,
+    title: 'التحكم بالصلاحيات',
+    description: 'نظام صلاحيات متقدم يتحكم بمن يرى ماذا حسب دوره في المنظمة',
+    color: '#F24935',
+  },
+  {
+    icon: BarChart3,
+    title: 'البحث الذكي',
+    description: 'ابحث في كل البيانات والتقييمات والتعليقات بخطوة واحدة',
+    color: '#84DBE5',
   },
   {
     icon: Building2,
@@ -121,14 +133,20 @@ export default function LandingPage() {
               transition={{ duration: 0.6 }}
               className="flex items-center justify-center gap-4"
             >
+              <Link href="/login">
+                <Button variant="primary" size="lg" className="flex items-center gap-2 font-black text-[16px]">
+                  <Shield className="w-5 h-5" />
+                  تسجيل الدخول
+                </Button>
+              </Link>
               <Link href="/dashboard">
-                <Button variant="primary" size="lg" className="flex items-center gap-2">
+                <Button variant="accent" size="lg" className="flex items-center gap-2 font-black text-[16px]">
                   <Upload className="w-5 h-5" />
-                  ابدأ الآن
+                  ابدأ مباشرة
                 </Button>
               </Link>
               <a href="#features">
-                <Button variant="secondary" size="lg" className="flex items-center gap-2">
+                <Button variant="secondary" size="lg" className="flex items-center gap-2 font-black text-[16px]">
                   اكتشف المزيد
                   <ArrowLeft className="w-4 h-4" />
                 </Button>
@@ -172,7 +190,7 @@ export default function LandingPage() {
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {features.map((feature, i) => (
               <motion.div
                 key={feature.title}
@@ -188,8 +206,8 @@ export default function LandingPage() {
                 >
                   <feature.icon className="w-6 h-6" style={{ color: feature.color }} />
                 </div>
-                <h3 className="font-ui font-bold text-[18px] mb-2">{feature.title}</h3>
-                <p className="font-body text-[15px] text-neutral-muted leading-relaxed">
+                <h3 className="font-ui font-black text-[18px] mb-2">{feature.title}</h3>
+                <p className="font-body font-bold text-[14px] text-neutral-muted leading-relaxed">
                   {feature.description}
                 </p>
               </motion.div>

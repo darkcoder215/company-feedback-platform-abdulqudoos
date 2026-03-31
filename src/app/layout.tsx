@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { AuthProviderWrapper } from "@/components/layout/AuthProviderWrapper";
 
 export const metadata: Metadata = {
   title: "منصة تحليل التقييمات — ثمانية",
@@ -14,7 +15,7 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl">
       <body className="font-ui bg-neutral-off-white text-brand-black antialiased">
-        {children}
+        <AuthProviderWrapper>{children}</AuthProviderWrapper>
       </body>
     </html>
   );
