@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Shield, TrendingUp, Target, Users, BarChart3, Award, Briefcase, Star, UserCheck, Activity, Layers } from 'lucide-react';
+import { AlertTriangle, Shield, TrendingUp, Target, Users, BarChart3, Award, Briefcase, Star, UserCheck, Activity, Layers, ClipboardCheck } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, PieChart, Pie, Cell, ReferenceLine } from 'recharts';
 import TopBar from '@/components/layout/TopBar';
 import RadialScore from '@/components/charts/RadialScore';
@@ -97,9 +97,9 @@ export default function InsightsPage() {
         {/* ── 0. Data Quality Summary ── */}
         {qualityReport && (
           <motion.section
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-80px' }}
+            viewport={{ once: true, margin: '-50px' }}
             className="bg-white rounded-2xl p-6 shadow-sm border border-neutral-cream"
           >
             <SectionHeader icon={Shield} title="جودة البيانات" subtitle="نتائج تنظيف وتوحيد البيانات" color="#0072F9" />
@@ -191,15 +191,19 @@ export default function InsightsPage() {
             </div>
           )}
 
-          <InsightBox text={`المؤشر الشامل للمنظمة ${health.composite}/١٠٠ — ${health.composite >= 70 ? 'أداء جيد، استمروا بالتحسين' : health.composite >= 50 ? 'أداء متوسط يحتاج انتباه' : 'أداء ضعيف يتطلب تدخل عاجل'}`} />
+          <div className="mt-4 bg-neutral-cream rounded-xl p-4">
+              <p className="font-ui font-bold text-[13px] text-neutral-muted">
+                <span className="text-brand-green font-black">💡 </span>المؤشر الشامل للمنظمة <span className="text-brand-green font-black bg-brand-green/10 px-1.5 py-0.5 rounded">{health.composite}/١٠٠</span> — {health.composite >= 70 ? 'أداء جيد، استمروا بالتحسين' : health.composite >= 50 ? 'أداء متوسط يحتاج انتباه' : 'أداء ضعيف يتطلب تدخل عاجل'}
+              </p>
+            </div>
         </motion.section>
 
         {/* ── 2. Talent Risk ── */}
         {(risk.critical.length + risk.high.length + risk.medium.length > 0) && (
           <motion.section
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-80px' }}
+            viewport={{ once: true, margin: '-50px' }}
             className="bg-white rounded-2xl p-6 shadow-sm"
           >
             <SectionHeader icon={AlertTriangle} title="مخاطر المواهب" subtitle="الموظفون المعرضون لخطر المغادرة أو الأداء المنخفض" color="#F24935" />
@@ -259,16 +263,20 @@ export default function InsightsPage() {
               </div>
             )}
 
-            <InsightBox text={`${risk.critical.length} موظف في خطر حرج — ركزوا على العقود المنتهية والموظفين غير المُتمسَّك بهم`} />
+            <div className="mt-4 bg-neutral-cream rounded-xl p-4">
+              <p className="font-ui font-bold text-[13px] text-neutral-muted">
+                <span className="text-brand-green font-black">💡 </span><span className="text-brand-green font-black bg-brand-green/10 px-1.5 py-0.5 rounded">{risk.critical.length}</span> موظف في خطر حرج — ركزوا على العقود المنتهية والموظفين غير المُتمسَّك بهم
+              </p>
+            </div>
           </motion.section>
         )}
 
         {/* ── 3. Strategic Recommendations ── */}
         {recommendations.length > 0 && (
           <motion.section
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-80px' }}
+            viewport={{ once: true, margin: '-50px' }}
             className="bg-white rounded-2xl p-6 shadow-sm"
           >
             <SectionHeader icon={Target} title="التوصيات الاستراتيجية" subtitle="إجراءات مقترحة بناءً على البيانات" color="#0072F9" />
@@ -306,9 +314,9 @@ export default function InsightsPage() {
         {/* ── 4. Onboarding Pipeline ── */}
         {pipeline.funnel.some(f => f.count > 0) && (
           <motion.section
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-80px' }}
+            viewport={{ once: true, margin: '-50px' }}
             className="bg-white rounded-2xl p-6 shadow-sm"
           >
             <SectionHeader icon={Activity} title="مسار التأهيل" subtitle="من التعيين إلى الترسيم" color="#00C17A" />
@@ -377,9 +385,9 @@ export default function InsightsPage() {
         {/* ── 5. Leadership Effectiveness ── */}
         {leadership.ranking.length > 0 && (
           <motion.section
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-80px' }}
+            viewport={{ once: true, margin: '-50px' }}
             className="bg-white rounded-2xl p-6 shadow-sm"
           >
             <SectionHeader icon={Shield} title="فعالية القيادة" subtitle="تصنيف القادة ومجالات التطوير" color="#82003A" />
@@ -460,9 +468,9 @@ export default function InsightsPage() {
         {/* ── 6. Skill Gap Analysis ── */}
         {skills.orgRadar.length > 0 && (
           <motion.section
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-80px' }}
+            viewport={{ once: true, margin: '-50px' }}
             className="bg-white rounded-2xl p-6 shadow-sm"
           >
             <SectionHeader icon={Star} title="تحليل فجوات المهارات" subtitle="المعايير الثمانية للأداء" color="#FFBC0A" />
@@ -541,9 +549,9 @@ export default function InsightsPage() {
         {/* ── 7. Manager Calibration ── */}
         {calibration.perfCalibration.length > 0 && (
           <motion.section
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-80px' }}
+            viewport={{ once: true, margin: '-50px' }}
             className="bg-white rounded-2xl p-6 shadow-sm"
           >
             <SectionHeader icon={UserCheck} title="معايرة المديرين" subtitle="مقارنة تقييمات المديرين بالمتوسط العام" color="#0072F9" />
@@ -584,9 +592,9 @@ export default function InsightsPage() {
         {/* ── 8. Workforce Composition ── */}
         {data.employees.length > 0 && (
           <motion.section
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-80px' }}
+            viewport={{ once: true, margin: '-50px' }}
             className="bg-white rounded-2xl p-6 shadow-sm"
           >
             <SectionHeader icon={Layers} title="تركيبة القوى العاملة" subtitle="توزيع الموظفين حسب الخبرة والعمر ونوع العمل" color="#14B8A6" />

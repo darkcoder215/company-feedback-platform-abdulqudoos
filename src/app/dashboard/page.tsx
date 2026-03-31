@@ -164,6 +164,51 @@ export default function DashboardPage() {
     return Array.from(keys);
   }, [stationByDept]);
 
+  // ── Department insights (Magic Wand) ──
+  const deptInsights = useMemo(() => {
+    const ad = cleanedData || data;
+    const insights: { dept: string; color: string; stats: { label: string; value: string; highlight?: boolean }[] }[] = [];
+
+    const deptNames = [...new Set(ad.employees.map(e => e.department).filter(Boolean))];
+    const DEPT_COLORS = ['#0072F9', '#00C17A', '#FFBC0A', '#F24935', '#82003A', '#84DBE5', '#FFA5C6', '#7C3AED'];
+
+    deptNames.forEach((dept, i) => {
+      const deptEmps = ad.employees.filter(e => e.department === dept);
+      const deptRevs = ad.reviews.filter(r => r.department === dept);
+      const deptLeaders = deptEmps.filter(e => e.isLeader);
+      const avgService = deptEmps.length > 0 ? (deptEmps.reduce((s, e) => s + (e.serviceYears || 0), 0) / deptEmps.length).toFixed(1) : '0';
+      const teams = new Set(deptEmps.map(e => e.team).filter(Boolean));
+      const fakhrs = deptRevs.filter(r => r.generalTrack === 'فخر').length;
+      const fakhrPct = deptRevs.length > 0 ? Math.round((fakhrs / deptRevs.length) * 100) : 0;
+      const probation = deptEmps.filter(e => e.inProbation).length;
+      const femaleCount = deptEmps.filter(e => e.gender === 'أنثى' || e.gender === 'Female').length;
+      const femalePct = deptEmps.length > 0 ? Math.round((femaleCount / deptEmps.length) * 100) : 0;
+
+      insights.push({
+        dept,
+        color: DEPT_COLORS[i % DEPT_COLORS.length],
+        stats: [
+          { label: 'عدد الموظفين', value: `${deptEmps.length}` },
+          { label: 'الفرق', value: `${teams.size}` },
+          { label: 'القادة', value: `${deptLeaders.length}` },
+          { label: 'متوسط الخدمة', value: `${avgService} سنة` },
+          { label: 'نسبة الفخر', value: `${fakhrPct}%`, highlight: fakhrPct >= 50 },
+          { label: 'التنوع', value: `${femalePct}% إناث` },
+          { label: 'في التجربة', value: `${probation}` },
+          { label: 'التقييمات', value: `${deptRevs.length}` },
+        ],
+      });
+    });
+    return insights;
+  }, [data, cleanedData]);
+
+  // Auto-rotate magic wand
+  useEffect(() => {
+    if (deptInsights.length <= 1) return;
+    const iv = setInterval(() => setMagicDeptIndex(p => (p + 1) % deptInsights.length), 5000);
+    return () => clearInterval(iv);
+  }, [deptInsights.length]);
+
   const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name?: string }>; label?: string }) => {
     if (!active || !payload?.length) return null;
     return (
@@ -228,6 +273,40 @@ export default function DashboardPage() {
               </div>
             </motion.div>
 
+            {/* ── Data Quality Banner ── */}
+            {qualityReport && (
+              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+                className="mb-6 bg-gradient-to-l from-brand-green/5 via-white to-brand-blue/5 rounded-2xl p-4 border border-brand-green/20"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="w-4 h-4 text-brand-green" />
+                  <span className="font-ui font-black text-[13px] text-brand-green">جودة البيانات الموحدة</span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div className="text-center">
+                    <p className="font-display font-black text-[22px] text-brand-blue">{qualityReport.totalEmployees}</p>
+                    <p className="font-ui font-bold text-[11px] text-neutral-muted">موظف موحد</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-display font-black text-[22px] text-brand-green">{qualityReport.totalEvaluations > 0 ? Math.round((qualityReport.matchedEvaluations / qualityReport.totalEvaluations) * 100) : 0}%</p>
+                    <p className="font-ui font-bold text-[11px] text-neutral-muted">ربط التقييمات</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-display font-black text-[22px] text-brand-green">{qualityReport.totalReviews > 0 ? Math.round((qualityReport.matchedReviews / qualityReport.totalReviews) * 100) : 0}%</p>
+                    <p className="font-ui font-bold text-[11px] text-neutral-muted">ربط المراجعات</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-display font-black text-[22px] text-brand-green">{qualityReport.totalLeaders > 0 ? Math.round((qualityReport.matchedLeaders / qualityReport.totalLeaders) * 100) : 0}%</p>
+                    <p className="font-ui font-bold text-[11px] text-neutral-muted">ربط القادة</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-display font-black text-[22px] text-brand-amber">{qualityReport.duplicatesRemoved + qualityReport.garbageRemoved}</p>
+                    <p className="font-ui font-bold text-[11px] text-neutral-muted">سجل محذوف</p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
             {/* ── Row 1: Core Stats ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <StatCard title="إجمالي الموظفين" value={stats.totalEmployees} subtitle={`${stats.departmentCount} إدارة`} icon={Users} color="#0072F9" delay={0} />
@@ -243,6 +322,21 @@ export default function DashboardPage() {
               <StatCard title="تقييمات القادة" value={data.leaders.length} subtitle={`${new Set(data.leaders.map(l => l.leaderName)).size} قائد`} icon={Shield} color="#82003A" delay={0.3} />
               <StatCard title="نسبة الترسيم" value={stats.confirmed + stats.terminated > 0 ? `${Math.round((stats.confirmed / (stats.confirmed + stats.terminated)) * 100)}%` : '-'} subtitle={`${stats.confirmed} ترسيم — ${stats.terminated} لم يستمر`} icon={TrendingUp} color="#F24935" delay={0.35} />
             </div>
+
+            {/* ── Row 3: New Data Sources ── */}
+            {(activeData.stationMeetings.length > 0 || activeData.retentionFlags.length > 0 || activeData.leaderAnalyses?.length > 0) && (
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                {activeData.stationMeetings.length > 0 && (
+                  <StatCard title="اجتماعات المحطة" value={activeData.stationMeetings.length} subtitle={`${new Set(activeData.stationMeetings.map(s => s.employeeName)).size} موظف`} icon={ClipboardCheck} color="#84DBE5" delay={0.4} />
+                )}
+                {activeData.retentionFlags.length > 0 && (
+                  <StatCard title="عدم التمسك" value={activeData.retentionFlags.length} subtitle="موظف مرشح لعدم التمسك" icon={TrendingUp} color="#F24935" delay={0.45} />
+                )}
+                {(activeData.leaderAnalyses?.length || 0) > 0 && (
+                  <StatCard title="تحليل القادة" value={activeData.leaderAnalyses?.length || 0} subtitle="تحليل قيادي شامل" icon={Award} color="#7C3AED" delay={0.5} />
+                )}
+              </div>
+            )}
 
             {/* ── Gender Visual (Icons) ── */}
             {(stats.genderDistribution.male > 0 || stats.genderDistribution.female > 0) && (
@@ -394,6 +488,66 @@ export default function DashboardPage() {
                 </motion.div>
               )}
             </div>
+
+            {/* ── Magic Wand Department Insights ── */}
+            {deptInsights.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}
+                className="bg-white rounded-2xl p-6 shadow-sm mb-6 overflow-hidden relative"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Wand2 className="w-4 h-4 text-brand-purple" style={{ color: '#7C3AED' }} />
+                    <h3 className="font-ui font-black text-[15px]">عصا الإحصاءات السحرية</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setMagicDeptIndex(p => (p - 1 + deptInsights.length) % deptInsights.length)} className="text-neutral-muted hover:text-brand-black transition-colors">
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    <span className="font-ui font-black text-[12px] text-neutral-muted">{magicDeptIndex + 1}/{deptInsights.length}</span>
+                    <button onClick={() => setMagicDeptIndex(p => (p + 1) % deptInsights.length)} className="text-neutral-muted hover:text-brand-black transition-colors">
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative min-h-[120px]">
+                  <AnimatePresence mode="wait">
+                    {deptInsights[magicDeptIndex] && (
+                      <motion.div key={magicDeptIndex} initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} transition={{ duration: 0.4 }}
+                        className="absolute inset-0"
+                      >
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: deptInsights[magicDeptIndex].color }} />
+                          <h4 className="font-ui font-black text-[18px]" style={{ color: deptInsights[magicDeptIndex].color }}>
+                            {deptInsights[magicDeptIndex].dept}
+                          </h4>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {deptInsights[magicDeptIndex].stats.map((s, i) => (
+                            <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                              className={`rounded-xl p-3 text-center ${s.highlight ? 'bg-brand-green/10 ring-1 ring-brand-green/30' : 'bg-neutral-cream/60'}`}
+                            >
+                              <p className={`font-display font-black text-[20px] ${s.highlight ? 'text-brand-green' : 'text-brand-black'}`}>{s.value}</p>
+                              <p className="font-ui font-bold text-[11px] text-neutral-muted">{s.label}</p>
+                            </motion.div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Dot indicators */}
+                <div className="flex gap-1 justify-center mt-4">
+                  {deptInsights.map((_, i) => (
+                    <button key={i} onClick={() => setMagicDeptIndex(i)}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${i === magicDeptIndex ? 'w-6' : 'w-1.5'}`}
+                      style={{ backgroundColor: i === magicDeptIndex ? (deptInsights[i]?.color || '#7C3AED') : '#D9D9D9' }}
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            )}
 
             {/* ── Station evaluations (تقييمات المحطة) ── */}
             {stationByDept.length > 0 && stationKeys.length > 0 && (
