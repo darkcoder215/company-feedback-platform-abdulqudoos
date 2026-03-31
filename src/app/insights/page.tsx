@@ -273,10 +273,10 @@ export default function InsightsPage() {
                           <h3 className="font-ui font-black text-[15px]">أداء الإدارات</h3>
                         </div>
                         <ResponsiveContainer width="100%" height={280}>
-                          <BarChart data={deptPerfData} layout="vertical" margin={{ right: 10, left: 10 }}>
+                          <BarChart data={deptPerfData} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
                             <XAxis type="number" domain={[0, 5]} tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
-                            <YAxis dataKey="name" type="category" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} width={90} />
+                            <YAxis dataKey="name" type="category" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} width={120} />
                             <Tooltip content={<CustomTooltip />} />
                             <Bar dataKey="score" fill="#0072F9" radius={[0, 8, 8, 0]} barSize={18} />
                           </BarChart>
@@ -547,11 +547,11 @@ export default function InsightsPage() {
                         {/* Score breakdown */}
                         <Card delay={0.15}>
                           <h3 className="font-ui font-black text-[15px] mb-4">تفصيل الدرجات</h3>
-                          <ResponsiveContainer width="100%" height={280}>
-                            <BarChart data={leaderDetail.scoreData} layout="vertical" margin={{ right: 10, left: 10 }}>
+                          <ResponsiveContainer width="100%" height={320}>
+                            <BarChart data={leaderDetail.scoreData} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                               <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
                               <XAxis type="number" domain={[0, 10]} tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
-                              <YAxis dataKey="name" type="category" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 10, fontWeight: 700 }} width={70} />
+                              <YAxis dataKey="name" type="category" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 10, fontWeight: 700 }} width={90} />
                               <Tooltip content={<CustomTooltip />} />
                               <Bar dataKey="score" fill="#82003A" radius={[0, 6, 6, 0]} barSize={14} />
                             </BarChart>

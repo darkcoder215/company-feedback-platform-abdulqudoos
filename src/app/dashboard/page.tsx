@@ -182,7 +182,7 @@ export default function DashboardPage() {
         </AnimatePresence>
 
         {hasData && (
-          <>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6 }}>
             {/* ── BIG Sliding Key Findings ── */}
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
               className="mb-8 bg-gradient-to-l from-brand-black via-neutral-dark-slate to-brand-black rounded-2xl p-8 relative overflow-hidden min-h-[140px]"
@@ -294,7 +294,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               {/* Department bar */}
               {departmentData.length > 0 && (
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, type: 'spring', stiffness: 150, damping: 20 }}
                   className="bg-white rounded-2xl p-6 shadow-sm"
                 >
                   <div className="flex items-center gap-2 mb-4">
@@ -302,10 +302,10 @@ export default function DashboardPage() {
                     <h3 className="font-ui font-black text-[15px]">توزيع الإدارات</h3>
                   </div>
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={departmentData} layout="vertical" margin={{ right: 10, left: 10 }}>
+                    <BarChart data={departmentData} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
                       <XAxis type="number" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
-                      <YAxis dataKey="name" type="category" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} width={110} />
+                      <YAxis dataKey="name" type="category" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} width={130} />
                       <Tooltip content={<CustomTooltip />} />
                       <Bar dataKey="count" fill="#0072F9" radius={[0, 8, 8, 0]} barSize={20} />
                     </BarChart>
@@ -353,10 +353,10 @@ export default function DashboardPage() {
                     <Star className="w-4 h-4 text-brand-amber" />
                     <h3 className="font-ui font-black text-[15px]">متوسط درجات الأداء</h3>
                   </div>
-                  <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={perfScoreAvgs} margin={{ right: 10, left: 10 }}>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={perfScoreAvgs} margin={{ top: 5, right: 10, left: 10, bottom: 40 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
-                      <XAxis dataKey="name" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 10, fontWeight: 700 }} interval={0} angle={-20} textAnchor="end" height={50} />
+                      <XAxis dataKey="name" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 10, fontWeight: 700 }} interval={0} angle={-30} textAnchor="end" height={60} />
                       <YAxis domain={[0, 5]} tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
                       <Tooltip content={<CustomTooltip />} />
                       <Bar dataKey="score" fill="#00C17A" radius={[6, 6, 0, 0]} barSize={28} />
@@ -396,9 +396,9 @@ export default function DashboardPage() {
                   <h3 className="font-ui font-black text-[15px]">تقييمات المحطات حسب الإدارة</h3>
                 </div>
                 <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={stationByDept} margin={{ right: 10, left: 10 }}>
+                  <BarChart data={stationByDept} margin={{ top: 5, right: 10, left: 10, bottom: 30 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
-                    <XAxis dataKey="name" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
+                    <XAxis dataKey="name" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 10, fontWeight: 700 }} interval={0} angle={-25} textAnchor="end" height={50} />
                     <YAxis tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
                     <Tooltip content={<CustomTooltip />} />
                     {stationKeys.map((k, i) => (
@@ -456,7 +456,7 @@ export default function DashboardPage() {
                 </div>
               </motion.div>
             )}
-          </>
+          </motion.div>
         )}
       </div>
     </div>

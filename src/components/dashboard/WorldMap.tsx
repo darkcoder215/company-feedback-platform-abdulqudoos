@@ -5,48 +5,69 @@ import {
   ComposableMap,
   Geographies,
   Geography,
-  Marker,
   ZoomableGroup,
 } from 'react-simple-maps';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
-// Map country/location names (Arabic) to approximate lat/lng
-const LOCATION_COORDS: Record<string, [number, number]> = {
-  'السعودية': [45.08, 23.88],
-  'الرياض': [46.72, 24.71],
-  'جدة': [39.17, 21.49],
-  'مصر': [31.24, 30.04],
-  'القاهرة': [31.24, 30.04],
-  'الأردن': [35.93, 31.96],
-  'عمّان': [35.93, 31.96],
-  'الإمارات': [54.37, 24.45],
-  'دبي': [55.27, 25.20],
-  'أبوظبي': [54.37, 24.45],
-  'الكويت': [47.98, 29.37],
-  'البحرين': [50.55, 26.07],
-  'قطر': [51.53, 25.29],
-  'العراق': [44.37, 33.31],
-  'سوريا': [36.29, 33.51],
-  'لبنان': [35.50, 33.89],
-  'فلسطين': [35.23, 31.95],
-  'اليمن': [44.21, 15.35],
-  'ليبيا': [13.18, 32.90],
-  'تونس': [10.17, 36.81],
-  'الجزائر': [3.06, 36.75],
-  'المغرب': [-6.84, 33.97],
-  'السودان': [32.53, 15.59],
-  'باكستان': [73.04, 33.69],
-  'الهند': [77.21, 28.61],
-  'بريطانيا': [-0.12, 51.51],
-  'أمريكا': [-77.04, 38.91],
-  'كندا': [-75.69, 45.42],
-  'تركيا': [32.86, 39.93],
-  'ألمانيا': [13.40, 52.52],
-  'فرنسا': [2.35, 48.86],
-  'عن بعد': [45.08, 23.88], // Default to Saudi
+// Map Arabic nationality names → ISO country names used in world-atlas
+const ARABIC_TO_ISO: Record<string, string> = {
+  'السعودية': 'Saudi Arabia', 'سعودي': 'Saudi Arabia', 'سعودية': 'Saudi Arabia',
+  'مصر': 'Egypt', 'مصري': 'Egypt', 'مصرية': 'Egypt',
+  'الأردن': 'Jordan', 'أردني': 'Jordan', 'أردنية': 'Jordan',
+  'الإمارات': 'United Arab Emirates', 'إماراتي': 'United Arab Emirates',
+  'الكويت': 'Kuwait', 'كويتي': 'Kuwait',
+  'البحرين': 'Bahrain', 'بحريني': 'Bahrain',
+  'قطر': 'Qatar', 'قطري': 'Qatar',
+  'العراق': 'Iraq', 'عراقي': 'Iraq',
+  'سوريا': 'Syria', 'سوري': 'Syria', 'سورية': 'Syria',
+  'لبنان': 'Lebanon', 'لبناني': 'Lebanon', 'لبنانية': 'Lebanon',
+  'فلسطين': 'Palestine', 'فلسطيني': 'Palestine',
+  'اليمن': 'Yemen', 'يمني': 'Yemen',
+  'ليبيا': 'Libya', 'ليبي': 'Libya',
+  'تونس': 'Tunisia', 'تونسي': 'Tunisia',
+  'الجزائر': 'Algeria', 'جزائري': 'Algeria',
+  'المغرب': 'Morocco', 'مغربي': 'Morocco',
+  'السودان': 'Sudan', 'سوداني': 'Sudan',
+  'باكستان': 'Pakistan', 'باكستاني': 'Pakistan',
+  'الهند': 'India', 'هندي': 'India',
+  'بريطانيا': 'United Kingdom', 'بريطاني': 'United Kingdom',
+  'أمريكا': 'United States of America', 'أمريكي': 'United States of America',
+  'كندا': 'Canada', 'كندي': 'Canada',
+  'تركيا': 'Turkey', 'تركي': 'Turkey', 'Türkiye': 'Turkey',
+  'ألمانيا': 'Germany', 'ألماني': 'Germany',
+  'فرنسا': 'France', 'فرنسي': 'France',
+  'إريتريا': 'Eritrea', 'إريتري': 'Eritrea',
+  'إثيوبيا': 'Ethiopia', 'إثيوبي': 'Ethiopia',
+  'نيجيريا': 'Nigeria', 'نيجيري': 'Nigeria',
+  'الفلبين': 'Philippines', 'فلبيني': 'Philippines',
+  'بنغلاديش': 'Bangladesh', 'بنغلاديشي': 'Bangladesh',
+  'إندونيسيا': 'Indonesia', 'إندونيسي': 'Indonesia',
+  'ماليزيا': 'Malaysia',
+  'عمان': 'Oman', 'عُمان': 'Oman', 'عماني': 'Oman',
+  'موريتانيا': 'Mauritania', 'موريتاني': 'Mauritania',
+  'الصومال': 'Somalia', 'صومالي': 'Somalia',
 };
+
+// Map Arabic city names → country (for drill-down)
+const CITY_TO_COUNTRY: Record<string, string> = {
+  'الرياض': 'Saudi Arabia', 'جدة': 'Saudi Arabia', 'الدمام': 'Saudi Arabia',
+  'مكة': 'Saudi Arabia', 'المدينة': 'Saudi Arabia', 'الخبر': 'Saudi Arabia',
+  'القاهرة': 'Egypt', 'الإسكندرية': 'Egypt',
+  'عمّان': 'Jordan', 'دبي': 'United Arab Emirates', 'أبوظبي': 'United Arab Emirates',
+  'عن بعد': '__remote__',
+};
+
+function heatColor(ratio: number): string {
+  // 0 → #EFEDE2 (neutral), 1 → #00C17A (green)
+  if (ratio <= 0) return '#EFEDE2';
+  if (ratio < 0.15) return '#D1EDEF';
+  if (ratio < 0.3) return '#AFE2EA';
+  if (ratio < 0.5) return '#84DBE5';
+  if (ratio < 0.7) return '#B2E2BA';
+  return '#00C17A';
+}
 
 interface WorldMapProps {
   locationData: Record<string, number>;
@@ -54,141 +75,209 @@ interface WorldMapProps {
 }
 
 export default function WorldMap({ locationData, nationalityData }: WorldMapProps) {
-  const [tooltip, setTooltip] = useState<{ name: string; count: number; x: number; y: number } | null>(null);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [hoveredGeo, setHoveredGeo] = useState<string | null>(null);
 
-  // Merge location and nationality data for markers
-  const markers = useMemo(() => {
-    const combined: Record<string, number> = {};
-    for (const [key, val] of Object.entries(locationData)) {
-      combined[key] = (combined[key] || 0) + val;
-    }
-    for (const [key, val] of Object.entries(nationalityData)) {
-      if (!combined[key]) combined[key] = val;
-    }
+  // Resolve all Arabic keys → ISO country name and aggregate
+  const countryTotals = useMemo(() => {
+    const totals: Record<string, { count: number; arabicName: string }> = {};
 
-    return Object.entries(combined)
-      .filter(([name]) => LOCATION_COORDS[name])
-      .map(([name, count]) => ({
-        name,
-        count,
-        coordinates: LOCATION_COORDS[name] as [number, number],
-      }))
-      .sort((a, b) => b.count - a.count);
+    const addData = (source: Record<string, number>) => {
+      for (const [arabicKey, count] of Object.entries(source)) {
+        // Try direct mapping
+        let isoName = ARABIC_TO_ISO[arabicKey];
+        // Try city mapping
+        if (!isoName && CITY_TO_COUNTRY[arabicKey]) {
+          const mapped = CITY_TO_COUNTRY[arabicKey];
+          if (mapped === '__remote__') continue; // skip remote workers for map
+          isoName = mapped;
+        }
+        if (!isoName) continue;
+        if (!totals[isoName]) totals[isoName] = { count: 0, arabicName: arabicKey };
+        totals[isoName].count += count;
+      }
+    };
+
+    addData(nationalityData);
+    addData(locationData);
+    return totals;
   }, [locationData, nationalityData]);
 
-  const maxCount = Math.max(...markers.map(m => m.count), 1);
+  const maxCount = useMemo(() => Math.max(...Object.values(countryTotals).map(c => c.count), 1), [countryTotals]);
+
+  // Build city breakdown for a selected country
+  const cityBreakdown = useMemo(() => {
+    if (!selectedCountry) return [];
+    const cities: { name: string; count: number }[] = [];
+    // Check location data for cities mapped to this country
+    for (const [key, count] of Object.entries(locationData)) {
+      const iso = CITY_TO_COUNTRY[key];
+      if (iso === selectedCountry) {
+        cities.push({ name: key, count });
+      }
+      // Also check if the key itself is the country
+      const countryIso = ARABIC_TO_ISO[key];
+      if (countryIso === selectedCountry && !CITY_TO_COUNTRY[key]) {
+        cities.push({ name: key, count });
+      }
+    }
+    // Add nationality data
+    for (const [key, count] of Object.entries(nationalityData)) {
+      const countryIso = ARABIC_TO_ISO[key];
+      if (countryIso === selectedCountry) {
+        // Only add if not already covered by location
+        if (!cities.find(c => c.name === key)) {
+          cities.push({ name: `${key} (جنسية)`, count });
+        }
+      }
+    }
+    return cities.sort((a, b) => b.count - a.count);
+  }, [selectedCountry, locationData, nationalityData]);
+
+  const remoteCount = locationData['عن بعد'] || 0;
 
   return (
-    <div className="relative w-full" style={{ aspectRatio: '2/1' }}>
-      <ComposableMap
-        projectionConfig={{ rotate: [-40, 0, 0], scale: 160 }}
-        style={{ width: '100%', height: '100%' }}
-      >
-        <ZoomableGroup center={[40, 25]} zoom={1.5}>
-          <Geographies geography={GEO_URL}>
-            {({ geographies }) =>
-              geographies.map((geo) => (
-                <Geography
-                  key={geo.rsmKey}
-                  geography={geo}
-                  fill="#EFEDE2"
-                  stroke="#D1C4E2"
-                  strokeWidth={0.5}
-                  style={{
-                    default: { outline: 'none' },
-                    hover: { fill: '#D1EDEF', outline: 'none' },
-                    pressed: { outline: 'none' },
-                  }}
-                />
-              ))
-            }
-          </Geographies>
+    <div className="relative">
+      {/* Map */}
+      <div className="w-full rounded-xl overflow-hidden bg-neutral-cream" style={{ aspectRatio: '2.2/1' }}>
+        <ComposableMap
+          projectionConfig={{ rotate: [-40, 0, 0], scale: 170 }}
+          style={{ width: '100%', height: '100%' }}
+        >
+          <ZoomableGroup center={[40, 25]} zoom={1.8} minZoom={1} maxZoom={5}>
+            <Geographies geography={GEO_URL}>
+              {({ geographies }) =>
+                geographies.map((geo) => {
+                  const geoName = geo.properties.name;
+                  const data = countryTotals[geoName];
+                  const isHovered = hoveredGeo === geoName;
+                  const isSelected = selectedCountry === geoName;
+                  const ratio = data ? data.count / maxCount : 0;
 
-          {markers.map((marker) => {
-            const size = Math.max(6, Math.min(24, (marker.count / maxCount) * 24));
-            return (
-              <Marker
-                key={marker.name}
-                coordinates={marker.coordinates}
-                onMouseEnter={(e) => {
-                  const rect = (e.target as SVGElement).closest('svg')?.getBoundingClientRect();
-                  if (rect) {
-                    setTooltip({
-                      name: marker.name,
-                      count: marker.count,
-                      x: e.clientX - rect.left,
-                      y: e.clientY - rect.top,
-                    });
-                  }
-                }}
-                onMouseLeave={() => setTooltip(null)}
-              >
-                <circle
-                  r={size / 2}
-                  fill="#00C17A"
-                  fillOpacity={0.6}
-                  stroke="#00C17A"
-                  strokeWidth={1.5}
-                  className="cursor-pointer"
-                />
-                <circle
-                  r={size / 2}
-                  fill="transparent"
-                  className="cursor-pointer"
-                >
-                  <animate
-                    attributeName="r"
-                    from={size / 2}
-                    to={size / 2 + 4}
-                    dur="2s"
-                    repeatCount="indefinite"
-                  />
-                  <animate
-                    attributeName="opacity"
-                    from="0.4"
-                    to="0"
-                    dur="2s"
-                    repeatCount="indefinite"
-                  />
-                </circle>
-                {marker.count > maxCount * 0.3 && (
-                  <text
-                    textAnchor="middle"
-                    y={-size / 2 - 4}
-                    style={{ fontFamily: 'Thmanyah Sans', fontSize: 9, fontWeight: 900, fill: '#2B2D3F' }}
-                  >
-                    {marker.name}
-                  </text>
-                )}
-              </Marker>
-            );
-          })}
-        </ZoomableGroup>
-      </ComposableMap>
+                  return (
+                    <Geography
+                      key={geo.rsmKey}
+                      geography={geo}
+                      fill={
+                        isSelected ? '#00C17A'
+                        : isHovered && data ? '#84DBE5'
+                        : data ? heatColor(ratio)
+                        : '#F4F2ED'
+                      }
+                      stroke={isSelected ? '#00C17A' : data ? '#B2E2BA' : '#E5E2D8'}
+                      strokeWidth={isSelected ? 1.5 : 0.5}
+                      style={{
+                        default: { outline: 'none', transition: 'fill 0.3s ease' },
+                        hover: { outline: 'none', cursor: data ? 'pointer' : 'default' },
+                        pressed: { outline: 'none' },
+                      }}
+                      onMouseEnter={() => setHoveredGeo(geoName)}
+                      onMouseLeave={() => setHoveredGeo(null)}
+                      onClick={() => {
+                        if (data) setSelectedCountry(isSelected ? null : geoName);
+                      }}
+                    />
+                  );
+                })
+              }
+            </Geographies>
+          </ZoomableGroup>
+        </ComposableMap>
+      </div>
 
-      {/* Tooltip */}
+      {/* Hover tooltip */}
       <AnimatePresence>
-        {tooltip && (
+        {hoveredGeo && countryTotals[hoveredGeo] && !selectedCountry && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="absolute pointer-events-none bg-brand-black text-white px-3 py-2 rounded-lg shadow-lg z-10"
-            style={{ left: tooltip.x + 10, top: tooltip.y - 40 }}
+            transition={{ duration: 0.15 }}
+            className="absolute top-4 left-4 bg-brand-black text-white px-4 py-3 rounded-xl shadow-lg z-10"
           >
-            <p className="font-ui font-black text-[13px]">{tooltip.name}</p>
-            <p className="font-ui font-bold text-[11px] text-brand-green">{tooltip.count} موظف</p>
+            <p className="font-ui font-black text-[14px]">{countryTotals[hoveredGeo].arabicName}</p>
+            <p className="font-display font-black text-[22px] text-brand-green leading-none">{countryTotals[hoveredGeo].count}</p>
+            <p className="font-ui font-bold text-[11px] text-white/50">اضغط لعرض التفاصيل</p>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Legend */}
-      <div className="absolute bottom-2 left-2 flex flex-wrap gap-2">
-        {markers.slice(0, 6).map((m) => (
-          <span key={m.name} className="font-ui font-black text-[11px] bg-white/80 backdrop-blur px-2 py-1 rounded text-brand-black">
-            {m.name}: <span className="text-brand-green">{m.count}</span>
-          </span>
-        ))}
+      {/* Country drill-down panel */}
+      <AnimatePresence>
+        {selectedCountry && countryTotals[selectedCountry] && (
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="absolute top-4 left-4 bg-white rounded-xl shadow-lg p-5 z-10 min-w-[220px] border border-neutral-warm-gray"
+          >
+            <button
+              onClick={() => setSelectedCountry(null)}
+              className="font-ui font-black text-[12px] text-brand-blue hover:underline mb-2 block"
+            >
+              ← العودة للخريطة
+            </button>
+            <h3 className="font-display font-black text-[20px] mb-1">
+              {countryTotals[selectedCountry].arabicName}
+            </h3>
+            <p className="font-display font-black text-[32px] text-brand-green leading-none mb-3">
+              {countryTotals[selectedCountry].count}
+            </p>
+
+            {cityBreakdown.length > 0 && (
+              <div className="border-t border-neutral-warm-gray pt-3 space-y-2">
+                <p className="font-ui font-black text-[12px] text-neutral-muted">التوزيع:</p>
+                {cityBreakdown.map(city => (
+                  <div key={city.name} className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-ui font-bold text-[13px]">{city.name}</span>
+                        <span className="font-display font-black text-[13px] text-brand-green">{city.count}</span>
+                      </div>
+                      <div className="h-1.5 bg-neutral-cream rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.round((city.count / countryTotals[selectedCountry].count) * 100)}%` }}
+                          transition={{ delay: 0.1, duration: 0.5 }}
+                          className="h-full bg-brand-green rounded-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Legend bar */}
+      <div className="mt-4 flex flex-wrap items-center gap-4 justify-between">
+        <div className="flex items-center gap-2">
+          <span className="font-ui font-bold text-[12px] text-neutral-muted">أقل</span>
+          <div className="flex gap-0.5">
+            {['#F4F2ED', '#D1EDEF', '#AFE2EA', '#84DBE5', '#B2E2BA', '#00C17A'].map(c => (
+              <div key={c} className="w-6 h-3 rounded-sm" style={{ backgroundColor: c }} />
+            ))}
+          </div>
+          <span className="font-ui font-bold text-[12px] text-neutral-muted">أكثر</span>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {Object.entries(countryTotals)
+            .sort(([, a], [, b]) => b.count - a.count)
+            .slice(0, 5)
+            .map(([, { arabicName, count }]) => (
+              <span key={arabicName} className="font-ui font-black text-[12px] text-neutral-charcoal">
+                {arabicName}: <span className="text-brand-green">{count}</span>
+              </span>
+            ))}
+          {remoteCount > 0 && (
+            <span className="font-ui font-black text-[12px] text-neutral-charcoal">
+              عن بعد: <span className="text-brand-blue">{remoteCount}</span>
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
