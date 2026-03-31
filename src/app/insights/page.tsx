@@ -5,12 +5,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, TrendingUp, AlertTriangle, Star, Shield, Award,
   ThumbsUp, ThumbsDown, Clock, Target, Building2, ChevronDown,
-  Briefcase, MapPin, Layers,
+  Briefcase, MapPin, Layers, Calendar, ArrowUpRight, ArrowDownRight, BarChart3,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, RadarChart, Radar,
   PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  LineChart, Line, AreaChart, Area, Legend,
 } from 'recharts';
 import TopBar from '@/components/layout/TopBar';
 import WorldMap from '@/components/dashboard/WorldMap';
@@ -20,7 +21,7 @@ import { getOverallStats } from '@/lib/analytics';
 const COLORS = ['#0072F9', '#00C17A', '#FFBC0A', '#F24935', '#82003A', '#84DBE5', '#FF9172', '#D1C4E2', '#FFA5C6', '#FFD1C4'];
 const TRACK_COLORS: Record<string, string> = { 'فخر': '#00C17A', 'خضر': '#B2E2BA', 'صفر': '#FFBC0A', 'حمر': '#F24935', 'خطر': '#82003A' };
 
-type TabKey = 'overview' | 'departments' | 'leaders';
+type TabKey = 'overview' | 'departments' | 'leaders' | 'timeline';
 
 function Card({ children, delay = 0, className = '' }: { children: React.ReactNode; delay?: number; className?: string }) {
   return (
@@ -196,10 +197,126 @@ export default function InsightsPage() {
       .sort((a, b) => b.score - a.score).slice(0, 10);
   }, [data.reviews]);
 
+  // ── Overall Averages ──
+  const averages = useMemo(() => {
+    // Average performance score across all reviews
+    let perfTotal = 0, perfCount = 0;
+    data.reviews.forEach(r => {
+      const scores = Object.values(r.performanceScores).filter(s => s > 0);
+      if (scores.length > 0) {
+        perfTotal += scores.reduce((a, b) => a + b, 0) / scores.length;
+        perfCount++;
+      }
+    });
+    const avgPerformance = perfCount > 0 ? Math.round((perfTotal / perfCount) * 10) / 10 : 0;
+
+    // Average leader evaluation score
+    const avgLeader = data.leaders.length > 0
+      ? Math.round((data.leaders.reduce((s, l) => s + l.averageScore, 0) / data.leaders.length) * 10) / 10
+      : 0;
+
+    // Average probation score (trafficLightScore)
+    const probEvals = data.evaluations.filter(e => e.trafficLightScore > 0);
+    const avgProbation = probEvals.length > 0
+      ? Math.round((probEvals.reduce((s, e) => s + e.trafficLightScore, 0) / probEvals.length) * 10) / 10
+      : 0;
+
+    // Department with highest/lowest averages
+    const deptScoresMap: Record<string, { total: number; count: number }> = {};
+    data.reviews.forEach(r => {
+      if (!r.department) return;
+      const scores = Object.values(r.performanceScores).filter(s => s > 0);
+      if (scores.length === 0) return;
+      const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+      if (!deptScoresMap[r.department]) deptScoresMap[r.department] = { total: 0, count: 0 };
+      deptScoresMap[r.department].total += avg;
+      deptScoresMap[r.department].count++;
+    });
+    const deptAvgs = Object.entries(deptScoresMap).map(([name, { total, count }]) => ({ name, avg: Math.round((total / count) * 10) / 10 }));
+    deptAvgs.sort((a, b) => b.avg - a.avg);
+    const highestDept = deptAvgs.length > 0 ? deptAvgs[0] : null;
+    const lowestDept = deptAvgs.length > 1 ? deptAvgs[deptAvgs.length - 1] : null;
+
+    return { avgPerformance, avgLeader, avgProbation, highestDept, lowestDept };
+  }, [data.reviews, data.leaders, data.evaluations]);
+
+  // ── Timeline Data ──
+  const timelineData = useMemo(() => {
+    const monthMap: Record<string, { month: string; reviews: number; perfTotal: number; perfCount: number; probations: number; leaderTotal: number; leaderCount: number }> = {};
+
+    const ensureMonth = (m: string) => {
+      if (!monthMap[m]) monthMap[m] = { month: m, reviews: 0, perfTotal: 0, perfCount: 0, probations: 0, leaderTotal: 0, leaderCount: 0 };
+    };
+
+    data.reviews.forEach(r => {
+      if (!r.reviewDate) return;
+      const m = r.reviewDate.slice(0, 7); // YYYY-MM
+      if (m.length !== 7) return;
+      ensureMonth(m);
+      monthMap[m].reviews++;
+      const scores = Object.values(r.performanceScores).filter(s => s > 0);
+      if (scores.length > 0) {
+        monthMap[m].perfTotal += scores.reduce((a, b) => a + b, 0) / scores.length;
+        monthMap[m].perfCount++;
+      }
+    });
+
+    data.evaluations.forEach(e => {
+      if (!e.submittedAt) return;
+      const m = e.submittedAt.slice(0, 7);
+      if (m.length !== 7) return;
+      ensureMonth(m);
+      monthMap[m].probations++;
+    });
+
+    data.leaders.forEach(l => {
+      if (!l.submittedAt) return;
+      const m = l.submittedAt.slice(0, 7);
+      if (m.length !== 7) return;
+      ensureMonth(m);
+      monthMap[m].leaderTotal += l.averageScore;
+      monthMap[m].leaderCount++;
+    });
+
+    return Object.values(monthMap)
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .map(d => ({
+        month: d.month,
+        'تقييمات الأداء': d.reviews,
+        'تقييمات التجربة': d.probations,
+        'متوسط الأداء': d.perfCount > 0 ? Math.round((d.perfTotal / d.perfCount) * 10) / 10 : null,
+        'متوسط القيادة': d.leaderCount > 0 ? Math.round((d.leaderTotal / d.leaderCount) * 10) / 10 : null,
+      }));
+  }, [data.reviews, data.evaluations, data.leaders]);
+
+  // ── Trending (compare first half vs second half of timeline) ──
+  const trends = useMemo(() => {
+    if (timelineData.length < 2) return { perf: 0, leader: 0 };
+    const mid = Math.floor(timelineData.length / 2);
+    const firstHalf = timelineData.slice(0, mid);
+    const secondHalf = timelineData.slice(mid);
+
+    const avgOf = (arr: typeof timelineData, key: 'متوسط الأداء' | 'متوسط القيادة') => {
+      const vals = arr.map(d => d[key]).filter((v): v is number => v !== null && v > 0);
+      return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+    };
+
+    const perfFirst = avgOf(firstHalf, 'متوسط الأداء');
+    const perfSecond = avgOf(secondHalf, 'متوسط الأداء');
+    const leaderFirst = avgOf(firstHalf, 'متوسط القيادة');
+    const leaderSecond = avgOf(secondHalf, 'متوسط القيادة');
+
+    return {
+      perf: perfFirst > 0 ? Math.round((perfSecond - perfFirst) * 10) / 10 : 0,
+      leader: leaderFirst > 0 ? Math.round((leaderSecond - leaderFirst) * 10) / 10 : 0,
+    };
+  }, [timelineData]);
+
   const hasAnyData = data.employees.length > 0 || data.reviews.length > 0 || data.evaluations.length > 0 || data.leaders.length > 0;
 
   const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
     { key: 'overview', label: 'نظرة عامة', icon: Target },
+    { key: 'timeline', label: 'الجدول الزمني', icon: Calendar },
     { key: 'departments', label: 'حسب الإدارة', icon: Building2 },
     { key: 'leaders', label: 'حسب القائد', icon: Shield },
   ];
@@ -244,6 +361,75 @@ export default function InsightsPage() {
                     <Card delay={0.1}><Metric value={data.evaluations.length} label="تقييم تجربة" color="#FFBC0A" /></Card>
                     <Card delay={0.15}><Metric value={data.leaders.length} label="تقييم قيادة" color="#82003A" /></Card>
                     <Card delay={0.2}><Metric value={`${stats.avgServiceYears}y`} label="متوسط الخدمة" color="#84DBE5" /></Card>
+                  </div>
+
+                  {/* Averages row */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {averages.avgPerformance > 0 && (
+                      <Card delay={0.22}>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <BarChart3 className="w-4 h-4 text-brand-blue" />
+                            <p className="font-ui font-black text-[12px] text-neutral-muted">متوسط الأداء</p>
+                          </div>
+                          {trends.perf !== 0 && (
+                            <div className={`flex items-center gap-0.5 ${trends.perf > 0 ? 'text-brand-green' : 'text-brand-red'}`}>
+                              {trends.perf > 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                              <span className="font-ui font-black text-[11px]">{Math.abs(trends.perf)}</span>
+                            </div>
+                          )}
+                        </div>
+                        <p className="font-display font-black text-[32px] leading-none text-brand-blue">{averages.avgPerformance}</p>
+                      </Card>
+                    )}
+                    {averages.avgLeader > 0 && (
+                      <Card delay={0.24}>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <Shield className="w-4 h-4 text-brand-burgundy" />
+                            <p className="font-ui font-black text-[12px] text-neutral-muted">متوسط تقييم القيادة</p>
+                          </div>
+                          {trends.leader !== 0 && (
+                            <div className={`flex items-center gap-0.5 ${trends.leader > 0 ? 'text-brand-green' : 'text-brand-red'}`}>
+                              {trends.leader > 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                              <span className="font-ui font-black text-[11px]">{Math.abs(trends.leader)}</span>
+                            </div>
+                          )}
+                        </div>
+                        <p className="font-display font-black text-[32px] leading-none text-brand-burgundy">{averages.avgLeader}</p>
+                      </Card>
+                    )}
+                    {averages.avgProbation > 0 && (
+                      <Card delay={0.26}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Clock className="w-4 h-4 text-brand-amber" />
+                          <p className="font-ui font-black text-[12px] text-neutral-muted">متوسط درجة التجربة</p>
+                        </div>
+                        <p className="font-display font-black text-[32px] leading-none text-brand-amber">{averages.avgProbation}</p>
+                      </Card>
+                    )}
+                    {(averages.highestDept || averages.lowestDept) && (
+                      <Card delay={0.28}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Building2 className="w-4 h-4 text-brand-green" />
+                          <p className="font-ui font-black text-[12px] text-neutral-muted">أعلى / أدنى إدارة</p>
+                        </div>
+                        {averages.highestDept && (
+                          <div className="flex items-center gap-2 mb-1">
+                            <ArrowUpRight className="w-3 h-3 text-brand-green" />
+                            <span className="font-ui font-bold text-[12px] truncate flex-1">{averages.highestDept.name}</span>
+                            <span className="font-display font-black text-[16px] text-brand-green">{averages.highestDept.avg}</span>
+                          </div>
+                        )}
+                        {averages.lowestDept && (
+                          <div className="flex items-center gap-2">
+                            <ArrowDownRight className="w-3 h-3 text-brand-red" />
+                            <span className="font-ui font-bold text-[12px] truncate flex-1">{averages.lowestDept.name}</span>
+                            <span className="font-display font-black text-[16px] text-brand-red">{averages.lowestDept.avg}</span>
+                          </div>
+                        )}
+                      </Card>
+                    )}
                   </div>
 
                   {/* Alerts */}
@@ -377,6 +563,110 @@ export default function InsightsPage() {
                       </div>
                     </div>
                   </Card>
+                </motion.div>
+              )}
+
+              {/* ══════ TIMELINE TAB ══════ */}
+              {activeTab === 'timeline' && (
+                <motion.div key="timeline" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
+                  {timelineData.length === 0 ? (
+                    <Card>
+                      <div className="text-center py-12">
+                        <Calendar className="w-12 h-12 mx-auto text-neutral-warm-gray mb-3" />
+                        <p className="font-ui font-black text-[16px] text-neutral-muted">لا توجد بيانات زمنية كافية</p>
+                      </div>
+                    </Card>
+                  ) : (
+                    <>
+                      {/* Summary averages for timeline */}
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <Card delay={0}>
+                          <p className="font-ui font-black text-[12px] text-neutral-muted mb-1">إجمالي الأشهر</p>
+                          <p className="font-display font-black text-[28px] leading-none text-brand-blue">{timelineData.length}</p>
+                        </Card>
+                        <Card delay={0.05}>
+                          <p className="font-ui font-black text-[12px] text-neutral-muted mb-1">متوسط التقييمات/شهر</p>
+                          <p className="font-display font-black text-[28px] leading-none text-brand-green">
+                            {Math.round(timelineData.reduce((s, d) => s + d['تقييمات الأداء'], 0) / timelineData.length * 10) / 10}
+                          </p>
+                        </Card>
+                        <Card delay={0.1}>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="font-ui font-black text-[12px] text-neutral-muted">اتجاه الأداء</p>
+                            {trends.perf !== 0 && (
+                              trends.perf > 0
+                                ? <ArrowUpRight className="w-4 h-4 text-brand-green" />
+                                : <ArrowDownRight className="w-4 h-4 text-brand-red" />
+                            )}
+                          </div>
+                          <p className={`font-display font-black text-[28px] leading-none ${trends.perf >= 0 ? 'text-brand-green' : 'text-brand-red'}`}>
+                            {trends.perf > 0 ? '+' : ''}{trends.perf}
+                          </p>
+                        </Card>
+                        <Card delay={0.15}>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="font-ui font-black text-[12px] text-neutral-muted">اتجاه القيادة</p>
+                            {trends.leader !== 0 && (
+                              trends.leader > 0
+                                ? <ArrowUpRight className="w-4 h-4 text-brand-green" />
+                                : <ArrowDownRight className="w-4 h-4 text-brand-red" />
+                            )}
+                          </div>
+                          <p className={`font-display font-black text-[28px] leading-none ${trends.leader >= 0 ? 'text-brand-green' : 'text-brand-red'}`}>
+                            {trends.leader > 0 ? '+' : ''}{trends.leader}
+                          </p>
+                        </Card>
+                      </div>
+
+                      {/* Review counts over time (Area chart) */}
+                      <Card delay={0.2}>
+                        <div className="flex items-center gap-2 mb-4">
+                          <TrendingUp className="w-4 h-4 text-brand-blue" />
+                          <h3 className="font-ui font-black text-[15px]">عدد التقييمات عبر الزمن</h3>
+                        </div>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <AreaChart data={timelineData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <defs>
+                              <linearGradient id="colorReviews" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#0072F9" stopOpacity={0.3} />
+                                <stop offset="95%" stopColor="#0072F9" stopOpacity={0} />
+                              </linearGradient>
+                              <linearGradient id="colorProbation" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#FFBC0A" stopOpacity={0.3} />
+                                <stop offset="95%" stopColor="#FFBC0A" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
+                            <XAxis dataKey="month" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
+                            <YAxis tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Legend wrapperStyle={{ fontFamily: 'Thmanyah Sans', fontSize: 12, fontWeight: 700 }} />
+                            <Area type="monotone" dataKey="تقييمات الأداء" stroke="#0072F9" fill="url(#colorReviews)" strokeWidth={2} />
+                            <Area type="monotone" dataKey="تقييمات التجربة" stroke="#FFBC0A" fill="url(#colorProbation)" strokeWidth={2} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </Card>
+
+                      {/* Average scores over time (Line chart) */}
+                      <Card delay={0.3}>
+                        <div className="flex items-center gap-2 mb-4">
+                          <Star className="w-4 h-4 text-brand-green" />
+                          <h3 className="font-ui font-black text-[15px]">متوسط الدرجات عبر الزمن</h3>
+                        </div>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <LineChart data={timelineData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
+                            <XAxis dataKey="month" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
+                            <YAxis domain={[0, 'auto']} tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Legend wrapperStyle={{ fontFamily: 'Thmanyah Sans', fontSize: 12, fontWeight: 700 }} />
+                            <Line type="monotone" dataKey="متوسط الأداء" stroke="#00C17A" strokeWidth={3} dot={{ fill: '#00C17A', r: 4 }} connectNulls />
+                            <Line type="monotone" dataKey="متوسط القيادة" stroke="#82003A" strokeWidth={3} dot={{ fill: '#82003A', r: 4 }} connectNulls />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </Card>
+                    </>
+                  )}
                 </motion.div>
               )}
 

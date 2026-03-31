@@ -177,6 +177,26 @@ export default function EmployeeProfilePage() {
     );
   }
 
+  // ── Overall averages ──
+  const overallPerfAvg = useMemo(() => {
+    if (reviews.length === 0) return 0;
+    const allScores: number[] = [];
+    for (const rev of reviews) {
+      const s = Object.values(rev.performanceScores).filter(v => v > 0);
+      if (s.length > 0) allScores.push(s.reduce((a, b) => a + b, 0) / s.length);
+    }
+    return allScores.length > 0 ? Math.round((allScores.reduce((a, b) => a + b, 0) / allScores.length) * 10) / 10 : 0;
+  }, [reviews]);
+
+  const overallProbAvg = useMemo(() => {
+    const allScores: number[] = [];
+    for (const ev of evaluations) {
+      if (ev.decisionStationScores) allScores.push(...Object.values(ev.decisionStationScores).filter(s => s > 0));
+      if (ev.firstImpressionScores) allScores.push(...Object.values(ev.firstImpressionScores).filter(s => s > 0));
+    }
+    return calculateAverageScore(allScores);
+  }, [evaluations]);
+
   const totalFeedbackSources = (evaluations.length > 0 ? 1 : 0) + (reviews.length > 0 ? 1 : 0) + (leaderEvals.length > 0 ? 1 : 0);
 
   return (
@@ -193,6 +213,47 @@ export default function EmployeeProfilePage() {
         </Link>
 
         <EmployeeCard employee={employee} />
+
+        {/* ── Overall Averages Summary ── */}
+        {totalFeedbackSources > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4"
+          >
+            {overallPerfAvg > 0 && (
+              <div className="bg-white rounded-xl p-5 shadow-sm text-center border-2 border-brand-green/10">
+                <Star className="w-5 h-5 text-brand-green mx-auto mb-2" />
+                <p className="font-display font-black text-[32px] text-brand-green leading-none">{overallPerfAvg}</p>
+                <p className="font-ui font-black text-[12px] text-neutral-muted mt-1">متوسط الأداء</p>
+                <p className="font-ui font-bold text-[11px] text-neutral-muted">من ٥</p>
+              </div>
+            )}
+            {overallLeaderAvg > 0 && (
+              <div className="bg-white rounded-xl p-5 shadow-sm text-center border-2 border-brand-burgundy/10">
+                <Shield className="w-5 h-5 text-brand-burgundy mx-auto mb-2" />
+                <p className="font-display font-black text-[32px] text-brand-burgundy leading-none">{overallLeaderAvg}</p>
+                <p className="font-ui font-black text-[12px] text-neutral-muted mt-1">تقييم القيادة</p>
+                <p className="font-ui font-bold text-[11px] text-neutral-muted">من ١٠</p>
+              </div>
+            )}
+            {overallProbAvg > 0 && (
+              <div className="bg-white rounded-xl p-5 shadow-sm text-center border-2 border-brand-amber/10">
+                <ClipboardCheck className="w-5 h-5 text-brand-amber mx-auto mb-2" />
+                <p className="font-display font-black text-[32px] text-brand-amber leading-none">{overallProbAvg.toFixed(1)}</p>
+                <p className="font-ui font-black text-[12px] text-neutral-muted mt-1">تقييم التجربة</p>
+                <p className="font-ui font-bold text-[11px] text-neutral-muted">من ٥</p>
+              </div>
+            )}
+            <div className="bg-white rounded-xl p-5 shadow-sm text-center border-2 border-brand-blue/10">
+              <Users className="w-5 h-5 text-brand-blue mx-auto mb-2" />
+              <p className="font-display font-black text-[32px] text-brand-blue leading-none">{evaluations.length + reviews.length + leaderEvals.length}</p>
+              <p className="font-ui font-black text-[12px] text-neutral-muted mt-1">إجمالي التقييمات</p>
+              <p className="font-ui font-bold text-[11px] text-neutral-muted">{evaluatedBy.length} مقيّم</p>
+            </div>
+          </motion.div>
+        )}
 
         {/* ── Feedback Summary Banner ── */}
         {totalFeedbackSources > 0 && (

@@ -34,6 +34,7 @@ import {
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
+  LabelList,
 } from 'recharts';
 import TopBar from '@/components/layout/TopBar';
 import FileUploader from '@/components/upload/FileUploader';
@@ -303,12 +304,14 @@ export default function DashboardPage() {
                     <h3 className="font-ui font-black text-[15px]">توزيع الإدارات</h3>
                   </div>
                   <ResponsiveContainer width="100%" height={Math.max(300, departmentData.length * 38)}>
-                    <BarChart data={departmentData} layout="vertical" margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                    <BarChart data={departmentData} layout="vertical" margin={{ top: 5, right: 120, left: 0, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" horizontal={false} />
                       <XAxis type="number" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
-                      <YAxis dataKey="name" type="category" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 12, fontWeight: 700, fill: '#2B2D3F' }} width={150} tickLine={false} axisLine={false} />
+                      <YAxis dataKey="name" type="category" tick={false} width={10} tickLine={false} axisLine={false} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="count" fill="#0072F9" radius={[0, 8, 8, 0]} barSize={20} />
+                      <Bar dataKey="count" fill="#0072F9" radius={[0, 8, 8, 0]} barSize={20}>
+                        <LabelList dataKey="name" position="right" style={{ fontFamily: 'Thmanyah Sans', fontSize: 13, fontWeight: 900, fill: '#2B2D3F' }} offset={8} />
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </motion.div>
