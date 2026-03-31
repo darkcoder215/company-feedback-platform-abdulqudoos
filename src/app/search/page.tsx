@@ -10,7 +10,9 @@ import {
   Star,
   ChevronLeft,
   Building2,
-  Briefcase,
+  Shield,
+  Lightbulb,
+  HelpCircle,
 } from 'lucide-react';
 import TopBar from '@/components/layout/TopBar';
 import { useData } from '@/context/DataContext';
@@ -35,6 +37,22 @@ const TRACK_COLORS: Record<string, string> = {
   'حمر': '#F24935',
   'خطر': '#82003A',
 };
+
+const SEARCH_EXAMPLES = [
+  { query: 'الإنتاج', description: 'البحث عن جميع موظفي إدارة الإنتاج' },
+  { query: 'فخر', description: 'الموظفون في درب الفخر (أعلى تقييم أداء)' },
+  { query: 'قائد', description: 'عرض القيادات وتقييماتهم' },
+  { query: 'السعودية', description: 'الموظفون حسب الجنسية' },
+  { query: 'الرياض', description: 'البحث حسب الموقع أو المكتب' },
+  { query: 'تطوير', description: 'البحث في التعليقات والملاحظات' },
+];
+
+const PLATFORM_GUIDE = [
+  { icon: User, title: 'الموظفون', desc: 'ابحث بالاسم، المسمى الوظيفي، الإدارة، الفريق، المدير، أو الموقع' },
+  { icon: Star, title: 'تقييمات الأداء', desc: 'ابحث باسم الموظف، القائد المباشر، الدرب، أو القسم' },
+  { icon: ClipboardCheck, title: 'فترات التجربة', desc: 'ابحث باسم الموظف أو المقيّم أو في التعليقات' },
+  { icon: Shield, title: 'تقييمات القيادة', desc: 'ابحث باسم القائد أو المقيّم أو في ملاحظات التقييم' },
+];
 
 export default function SearchPage() {
   const { data } = useData();
@@ -146,7 +164,7 @@ export default function SearchPage() {
       case 'employee': return User;
       case 'review': return Star;
       case 'evaluation': return ClipboardCheck;
-      case 'leader': return Building2;
+      case 'leader': return Shield;
       default: return Search;
     }
   };
@@ -171,6 +189,16 @@ export default function SearchPage() {
     }
   };
 
+  const typeSectionLabel = (type: string) => {
+    switch (type) {
+      case 'employee': return 'الموظفون';
+      case 'review': return 'تقييمات الأداء';
+      case 'evaluation': return 'فترات التجربة';
+      case 'leader': return 'تقييمات القيادة';
+      default: return '';
+    }
+  };
+
   // Group results
   const grouped = useMemo(() => {
     const groups: Record<string, SearchResult[]> = {};
@@ -186,7 +214,7 @@ export default function SearchPage() {
       <TopBar title="البحث الذكي" />
       <div className="p-8">
         {/* Search input */}
-        <div className="max-w-[600px] mx-auto mb-10">
+        <div className="max-w-[640px] mx-auto mb-10">
           <div className="relative">
             <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 text-neutral-muted" />
             <input
@@ -227,11 +255,9 @@ export default function SearchPage() {
             >
               {/* Section header */}
               <div className="flex items-center gap-2 mb-4">
-                {type === 'employee' && <User className="w-5 h-5 text-brand-blue" />}
-                {type === 'review' && <Star className="w-5 h-5 text-brand-green" />}
-                {type === 'evaluation' && <ClipboardCheck className="w-5 h-5 text-brand-amber" />}
+                {(() => { const Icon = typeIcon(type); return <Icon className="w-5 h-5 text-neutral-muted" />; })()}
                 <h2 className="font-display font-black text-[18px]">
-                  {type === 'employee' ? 'الموظفون' : type === 'review' ? 'تقييمات الأداء' : 'فترات التجربة'}
+                  {typeSectionLabel(type)}
                 </h2>
                 <Badge variant={typeVariant(type)}>{items.length}</Badge>
               </div>
@@ -266,6 +292,9 @@ export default function SearchPage() {
                               {result.track}
                             </span>
                           )}
+                          {result.score !== undefined && (
+                            <span className="font-ui font-black text-[11px] text-brand-green">{result.score.toFixed(1)}/١٠</span>
+                          )}
                         </div>
                         <p className="font-ui font-bold text-[12px] text-neutral-muted truncate">{result.subtitle}</p>
                         {result.details.length > 0 && (
@@ -296,13 +325,9 @@ export default function SearchPage() {
           ))}
         </AnimatePresence>
 
-        {/* Empty state */}
+        {/* Empty state on search */}
         {query.length >= 2 && results.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-16"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
             <Search className="w-16 h-16 mx-auto text-neutral-warm-gray mb-4" />
             <p className="font-display font-bold text-[20px] mb-2">لا توجد نتائج</p>
             <p className="font-body text-[14px] text-neutral-muted">
@@ -311,30 +336,86 @@ export default function SearchPage() {
           </motion.div>
         )}
 
-        {/* Initial state - no query */}
+        {/* ── Initial state: guide + examples ── */}
         {!query && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-16"
-          >
-            <Search className="w-20 h-20 mx-auto text-neutral-warm-gray/50 mb-6" />
-            <p className="font-display font-bold text-[22px] mb-3">ابحث في كل البيانات</p>
-            <p className="font-body text-[15px] text-neutral-muted max-w-[400px] mx-auto leading-relaxed">
-              ابحث بالاسم، الإدارة، الفريق، المدير، المسمى الوظيفي، أو أي نص في التعليقات والملاحظات
-            </p>
-            <div className="flex flex-wrap justify-center gap-3 mt-6">
-              {['الإنتاج', 'فخر', 'المحتوى', 'قائد', 'السعودية'].map(suggestion => (
-                <button
-                  key={suggestion}
-                  onClick={() => setQuery(suggestion)}
-                  className="font-ui font-bold text-[13px] px-4 py-2 rounded-full bg-neutral-cream hover:bg-neutral-warm-gray transition-colors text-neutral-muted"
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          </motion.div>
+          <div className="max-w-[800px] mx-auto">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center mb-10">
+              <Search className="w-16 h-16 mx-auto text-neutral-warm-gray/40 mb-4" />
+              <p className="font-display font-bold text-[24px] mb-2">ابحث في كل البيانات</p>
+              <p className="font-body text-[15px] text-neutral-muted max-w-[500px] mx-auto leading-relaxed">
+                يمكنك البحث عبر جميع بيانات المنصة — الموظفون، تقييمات الأداء، فترات التجربة، وتقييمات القيادة
+              </p>
+            </motion.div>
+
+            {/* Quick search examples */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="mb-8"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <Lightbulb className="w-4 h-4 text-brand-amber" />
+                <h3 className="font-ui font-bold text-[15px]">أمثلة للبحث</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {SEARCH_EXAMPLES.map((example) => (
+                  <button
+                    key={example.query}
+                    onClick={() => setQuery(example.query)}
+                    className="text-right bg-white rounded-lg p-4 shadow-sm hover:shadow-md transition-all hover:border-brand-green border-2 border-transparent group"
+                  >
+                    <span className="font-ui font-black text-[14px] text-brand-green group-hover:text-brand-black transition-colors">
+                      &quot;{example.query}&quot;
+                    </span>
+                    <p className="font-ui text-[12px] text-neutral-muted mt-1">{example.description}</p>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Platform guide */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <HelpCircle className="w-4 h-4 text-brand-blue" />
+                <h3 className="font-ui font-bold text-[15px]">ما يمكنك البحث عنه</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {PLATFORM_GUIDE.map((item) => (
+                  <div key={item.title} className="bg-white rounded-lg p-4 shadow-sm flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-neutral-cream flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <item.icon className="w-4 h-4 text-neutral-muted" />
+                    </div>
+                    <div>
+                      <h4 className="font-ui font-bold text-[14px]">{item.title}</h4>
+                      <p className="font-ui text-[12px] text-neutral-muted mt-1 leading-relaxed">{item.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Data stats */}
+              <div className="mt-6 bg-gradient-to-l from-neutral-cream to-white rounded-xl p-5 flex flex-wrap items-center justify-center gap-6">
+                <span className="font-ui text-[13px] text-neutral-muted">البيانات المتاحة:</span>
+                {data.employees.length > 0 && (
+                  <span className="font-ui font-bold text-[13px] text-brand-blue">{data.employees.length} موظف</span>
+                )}
+                {data.reviews.length > 0 && (
+                  <span className="font-ui font-bold text-[13px] text-brand-green">{data.reviews.length} تقييم أداء</span>
+                )}
+                {data.evaluations.length > 0 && (
+                  <span className="font-ui font-bold text-[13px] text-brand-amber">{data.evaluations.length} تقييم تجربة</span>
+                )}
+                {data.leaders.length > 0 && (
+                  <span className="font-ui font-bold text-[13px] text-brand-burgundy">{data.leaders.length} تقييم قيادة</span>
+                )}
+              </div>
+            </motion.div>
+          </div>
         )}
       </div>
     </div>

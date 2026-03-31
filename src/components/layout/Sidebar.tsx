@@ -13,6 +13,7 @@ import {
   Star,
   Search,
   Shield,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { ROLE_LABELS } from '@/lib/types';
@@ -28,6 +29,7 @@ export default function Sidebar() {
     { href: '/reviews', label: 'تقييمات الأداء', icon: Star, show: canViewReviews },
     { href: '/leaders', label: 'تقييمات القادة', icon: Shield, show: canViewReviews },
     { href: '/probation', label: 'فترات التجربة', icon: ClipboardCheck, show: canViewReviews },
+    { href: '/insights', label: 'الرؤى والتحليلات', icon: Sparkles, show: canViewReviews },
     { href: '/departments', label: 'الإدارات', icon: Building2, show: true },
   ];
 
