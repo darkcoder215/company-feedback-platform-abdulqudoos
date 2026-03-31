@@ -24,12 +24,12 @@ export default function Sidebar() {
 
   const navItems = [
     { href: '/dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, show: true },
+    { href: '/insights', label: 'الرؤى والتحليلات', icon: Sparkles, show: true },
     { href: '/search', label: 'البحث الذكي', icon: Search, show: true },
     { href: '/employees', label: 'الموظفون', icon: Users, show: true },
     { href: '/reviews', label: 'تقييمات الأداء', icon: Star, show: canViewReviews },
     { href: '/leaders', label: 'تقييمات القادة', icon: Shield, show: canViewReviews },
     { href: '/probation', label: 'فترات التجربة', icon: ClipboardCheck, show: canViewReviews },
-    { href: '/insights', label: 'الرؤى والتحليلات', icon: Sparkles, show: canViewReviews },
     { href: '/departments', label: 'الإدارات', icon: Building2, show: true },
   ];
 

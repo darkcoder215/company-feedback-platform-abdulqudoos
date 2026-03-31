@@ -69,12 +69,19 @@ function heatColor(ratio: number): string {
   return '#00C17A';
 }
 
+interface EmployeeBasic {
+  nationality: string;
+  currentLocation: string;
+  department: string;
+}
+
 interface WorldMapProps {
   locationData: Record<string, number>;
   nationalityData: Record<string, number>;
+  employees?: EmployeeBasic[];
 }
 
-export default function WorldMap({ locationData, nationalityData }: WorldMapProps) {
+export default function WorldMap({ locationData, nationalityData, employees = [] }: WorldMapProps) {
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [hoveredGeo, setHoveredGeo] = useState<string | null>(null);
 
@@ -105,27 +112,23 @@ export default function WorldMap({ locationData, nationalityData }: WorldMapProp
 
   const maxCount = useMemo(() => Math.max(...Object.values(countryTotals).map(c => c.count), 1), [countryTotals]);
 
-  // Build city breakdown for a selected country
+  // Build city + department breakdown for a selected country
   const cityBreakdown = useMemo(() => {
     if (!selectedCountry) return [];
     const cities: { name: string; count: number }[] = [];
-    // Check location data for cities mapped to this country
     for (const [key, count] of Object.entries(locationData)) {
       const iso = CITY_TO_COUNTRY[key];
       if (iso === selectedCountry) {
         cities.push({ name: key, count });
       }
-      // Also check if the key itself is the country
       const countryIso = ARABIC_TO_ISO[key];
       if (countryIso === selectedCountry && !CITY_TO_COUNTRY[key]) {
         cities.push({ name: key, count });
       }
     }
-    // Add nationality data
     for (const [key, count] of Object.entries(nationalityData)) {
       const countryIso = ARABIC_TO_ISO[key];
       if (countryIso === selectedCountry) {
-        // Only add if not already covered by location
         if (!cities.find(c => c.name === key)) {
           cities.push({ name: `${key} (جنسية)`, count });
         }
@@ -133,6 +136,21 @@ export default function WorldMap({ locationData, nationalityData }: WorldMapProp
     }
     return cities.sort((a, b) => b.count - a.count);
   }, [selectedCountry, locationData, nationalityData]);
+
+  // Department breakdown for selected country
+  const deptBreakdown = useMemo(() => {
+    if (!selectedCountry || employees.length === 0) return [];
+    const depts: Record<string, number> = {};
+    for (const emp of employees) {
+      // Match by nationality or location
+      const natIso = ARABIC_TO_ISO[emp.nationality];
+      const locIso = ARABIC_TO_ISO[emp.currentLocation] || CITY_TO_COUNTRY[emp.currentLocation];
+      if (natIso === selectedCountry || locIso === selectedCountry) {
+        if (emp.department) depts[emp.department] = (depts[emp.department] || 0) + 1;
+      }
+    }
+    return Object.entries(depts).sort(([, a], [, b]) => b - a).map(([name, count]) => ({ name, count }));
+  }, [selectedCountry, employees]);
 
   const remoteCount = locationData['عن بعد'] || 0;
 
@@ -227,7 +245,7 @@ export default function WorldMap({ locationData, nationalityData }: WorldMapProp
 
             {cityBreakdown.length > 0 && (
               <div className="border-t border-neutral-warm-gray pt-3 space-y-2">
-                <p className="font-ui font-black text-[12px] text-neutral-muted">التوزيع:</p>
+                <p className="font-ui font-black text-[12px] text-neutral-muted">التوزيع حسب الموقع:</p>
                 {cityBreakdown.map(city => (
                   <div key={city.name} className="flex items-center gap-2">
                     <div className="flex-1">
@@ -241,6 +259,30 @@ export default function WorldMap({ locationData, nationalityData }: WorldMapProp
                           animate={{ width: `${Math.round((city.count / countryTotals[selectedCountry].count) * 100)}%` }}
                           transition={{ delay: 0.1, duration: 0.5 }}
                           className="h-full bg-brand-green rounded-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {deptBreakdown.length > 0 && (
+              <div className="border-t border-neutral-warm-gray pt-3 mt-3 space-y-2">
+                <p className="font-ui font-black text-[12px] text-neutral-muted">التوزيع حسب الإدارة:</p>
+                {deptBreakdown.slice(0, 8).map((dept, i) => (
+                  <div key={dept.name} className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-ui font-bold text-[12px]">{dept.name}</span>
+                        <span className="font-display font-black text-[12px] text-brand-blue">{dept.count}</span>
+                      </div>
+                      <div className="h-1.5 bg-neutral-cream rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.round((dept.count / countryTotals[selectedCountry].count) * 100)}%` }}
+                          transition={{ delay: 0.15 + i * 0.05, duration: 0.5 }}
+                          className="h-full bg-brand-blue rounded-full"
                         />
                       </div>
                     </div>

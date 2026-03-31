@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 
 interface DepartmentChartProps {
   data: Array<{ name: string; value: number; color?: string }>;
@@ -17,24 +17,28 @@ export default function DepartmentChart({
 }: DepartmentChartProps) {
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} layout="vertical" margin={{ right: 10, left: 10 }}>
-        <XAxis type="number" hide />
+      <BarChart data={data} layout="vertical" margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" horizontal={false} />
+        <XAxis type="number" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
         <YAxis
           type="category"
           dataKey="name"
-          width={120}
-          tick={{ fontFamily: 'Thmanyah Sans', fontSize: 13, fill: '#494C6B' }}
+          width={150}
+          tick={{ fontFamily: 'Thmanyah Sans', fontSize: 13, fontWeight: 700, fill: '#2B2D3F' }}
+          tickLine={false}
+          axisLine={false}
         />
         <Tooltip
           contentStyle={{
             fontFamily: 'Thmanyah Sans',
             fontSize: 13,
+            fontWeight: 700,
             borderRadius: 8,
             border: 'none',
             boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
           }}
         />
-        <Bar dataKey={dataKey} radius={[0, 8, 8, 0]} barSize={24}>
+        <Bar dataKey={dataKey} radius={[0, 8, 8, 0]} barSize={22}>
           {data.map((entry, index) => (
             <Cell key={index} fill={entry.color || COLORS[index % COLORS.length]} />
           ))}
