@@ -184,6 +184,17 @@ export default function DashboardPage() {
       const femaleCount = deptEmps.filter(e => e.gender === 'أنثى' || e.gender === 'Female').length;
       const femalePct = deptEmps.length > 0 ? Math.round((femaleCount / deptEmps.length) * 100) : 0;
 
+      // Contract/tenure stats
+      const contractDays = deptEmps.filter(e => e.contractDaysRemaining > 0).map(e => e.contractDaysRemaining);
+      const avgContractMonths = contractDays.length > 0 ? Math.round(contractDays.reduce((s, d) => s + d, 0) / contractDays.length / 30) : 0;
+      const serviceYears = deptEmps.map(e => e.serviceYears || 0).filter(y => y > 0);
+      const maxService = serviceYears.length > 0 ? Math.max(...serviceYears).toFixed(1) : '0';
+      const minServiceMonths = deptEmps.map(e => e.serviceMonths || 0).filter(m => m > 0);
+      const newestMonths = minServiceMonths.length > 0 ? Math.min(...minServiceMonths) : 0;
+      // Retention risk
+      const deptFlags = ad.retentionFlags?.filter(f => f.department === dept).length || 0;
+      const retentionPct = deptEmps.length > 0 ? Math.round(((deptEmps.length - deptFlags) / deptEmps.length) * 100) : 100;
+
       insights.push({
         dept,
         color: DEPT_COLORS[i % DEPT_COLORS.length],
@@ -192,6 +203,10 @@ export default function DashboardPage() {
           { label: 'الفرق', value: `${teams.size}` },
           { label: 'القادة', value: `${deptLeaders.length}` },
           { label: 'متوسط الخدمة', value: `${avgService} سنة` },
+          { label: 'أقدم موظف', value: `${maxService} سنة` },
+          { label: 'أحدث موظف', value: newestMonths > 0 ? `${newestMonths} شهر` : '-' },
+          { label: 'متبقي العقد', value: avgContractMonths > 0 ? `${avgContractMonths} شهر` : '-' },
+          { label: 'نسبة التمسك', value: `${retentionPct}%`, highlight: retentionPct >= 90 },
           { label: 'نسبة الفخر', value: `${fakhrPct}%`, highlight: fakhrPct >= 50 },
           { label: 'التنوع', value: `${femalePct}% إناث` },
           { label: 'في التجربة', value: `${probation}` },
@@ -402,14 +417,14 @@ export default function DashboardPage() {
                     <Building2 className="w-4 h-4 text-brand-blue" />
                     <h3 className="font-ui font-black text-[15px]">توزيع الإدارات</h3>
                   </div>
-                  <ResponsiveContainer width="100%" height={Math.max(300, departmentData.length * 38)}>
-                    <BarChart data={departmentData} layout="vertical" margin={{ top: 5, right: 120, left: 0, bottom: 5 }}>
+                  <ResponsiveContainer width="100%" height={Math.max(300, departmentData.length * 42)}>
+                    <BarChart data={departmentData} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" horizontal={false} />
                       <XAxis type="number" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
-                      <YAxis dataKey="name" type="category" tick={false} width={10} tickLine={false} axisLine={false} />
+                      <YAxis dataKey="name" type="category" width={130} tick={{ fontFamily: 'Thmanyah Sans', fontSize: 12, fontWeight: 900, fill: '#2B2D3F' }} tickLine={false} axisLine={false} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="count" fill="#0072F9" radius={[0, 8, 8, 0]} barSize={20}>
-                        <LabelList dataKey="name" position="right" style={{ fontFamily: 'Thmanyah Sans', fontSize: 13, fontWeight: 900, fill: '#2B2D3F' }} offset={8} />
+                      <Bar dataKey="count" fill="#0072F9" radius={[0, 8, 8, 0]} barSize={22}>
+                        <LabelList dataKey="count" position="right" style={{ fontFamily: 'Thmanyah Sans', fontSize: 12, fontWeight: 700, fill: '#6B7280' }} offset={6} />
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
@@ -456,10 +471,10 @@ export default function DashboardPage() {
                     <Star className="w-4 h-4 text-brand-amber" />
                     <h3 className="font-ui font-black text-[15px]">متوسط درجات الأداء</h3>
                   </div>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={perfScoreAvgs} margin={{ top: 5, right: 10, left: 10, bottom: 40 }}>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <BarChart data={perfScoreAvgs} margin={{ top: 5, right: 10, left: 10, bottom: 55 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
-                      <XAxis dataKey="name" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 10, fontWeight: 700 }} interval={0} angle={-30} textAnchor="end" height={60} />
+                      <XAxis dataKey="name" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 10, fontWeight: 700 }} interval={0} angle={-45} textAnchor="end" height={90} />
                       <YAxis domain={[0, 5]} tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
                       <Tooltip content={<CustomTooltip />} />
                       <Bar dataKey="score" fill="#00C17A" radius={[6, 6, 0, 0]} barSize={28} />
@@ -522,7 +537,7 @@ export default function DashboardPage() {
                             {deptInsights[magicDeptIndex].dept}
                           </h4>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                           {deptInsights[magicDeptIndex].stats.map((s, i) => (
                             <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                               className={`rounded-xl p-3 text-center ${s.highlight ? 'bg-brand-green/10 ring-1 ring-brand-green/30' : 'bg-neutral-cream/60'}`}
@@ -558,10 +573,10 @@ export default function DashboardPage() {
                   <ClipboardCheck className="w-4 h-4 text-brand-blue" />
                   <h3 className="font-ui font-black text-[15px]">تقييمات المحطات حسب الإدارة</h3>
                 </div>
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={stationByDept} margin={{ top: 5, right: 10, left: 10, bottom: 30 }}>
+                <ResponsiveContainer width="100%" height={340}>
+                  <BarChart data={stationByDept} margin={{ top: 5, right: 10, left: 10, bottom: 50 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
-                    <XAxis dataKey="name" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 10, fontWeight: 700 }} interval={0} angle={-25} textAnchor="end" height={50} />
+                    <XAxis dataKey="name" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 10, fontWeight: 700 }} interval={0} angle={-45} textAnchor="end" height={90} />
                     <YAxis tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
                     <Tooltip content={<CustomTooltip />} />
                     {stationKeys.map((k, i) => (
@@ -580,35 +595,78 @@ export default function DashboardPage() {
               </motion.div>
             )}
 
-            {/* ── Retention Flags Summary ── */}
-            {activeData.retentionFlags.length > 0 && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.62 }}
-                className="bg-white rounded-2xl p-6 shadow-sm mb-6"
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <TrendingUp className="w-4 h-4 text-brand-red" />
-                  <h3 className="font-ui font-black text-[15px]">مؤشرات عدم التمسك</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {activeData.retentionFlags.slice(0, 6).map((rf, i) => (
-                    <motion.div key={rf.id || i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 + i * 0.05 }}
-                      className="rounded-xl border-2 border-brand-red/10 bg-brand-red/5 p-4"
-                    >
-                      <p className="font-ui font-black text-[14px] text-brand-black mb-1">{rf.employeeName}</p>
-                      <p className="font-ui font-bold text-[12px] text-neutral-muted mb-2">{rf.department} — الدرب: {rf.generalTrack}</p>
-                      {rf.managerJustification && (
-                        <p className="font-ui font-bold text-[11px] text-brand-red/80 line-clamp-2">{rf.managerJustification}</p>
-                      )}
-                    </motion.div>
-                  ))}
-                </div>
-                {activeData.retentionFlags.length > 6 && (
-                  <p className="font-ui font-bold text-[12px] text-neutral-muted text-center mt-3">
-                    +{activeData.retentionFlags.length - 6} سجلات أخرى
-                  </p>
-                )}
-              </motion.div>
-            )}
+            {/* ── Retention Flags Summary (Numerical) ── */}
+            {activeData.retentionFlags.length > 0 && (() => {
+              const rf = activeData.retentionFlags;
+              const trackBreakdown: Record<string, number> = {};
+              const deptBreakdown: Record<string, number> = {};
+              let totalPct = 0, pctCount = 0;
+              let retainYes = 0, retainNo = 0;
+              rf.forEach(f => {
+                if (f.generalTrack) trackBreakdown[f.generalTrack] = (trackBreakdown[f.generalTrack] || 0) + 1;
+                if (f.department) deptBreakdown[f.department] = (deptBreakdown[f.department] || 0) + 1;
+                if (f.generalTrackPercent > 0) { totalPct += f.generalTrackPercent; pctCount++; }
+                const r = f.retainEmployee?.trim();
+                if (r === 'نعم' || r === '✅' || r === 'Yes') retainYes++; else retainNo++;
+              });
+              const avgPct = pctCount > 0 ? Math.round(totalPct / pctCount) : 0;
+              const topDepts = Object.entries(deptBreakdown).sort(([,a],[,b]) => b - a).slice(0, 5);
+              return (
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.62 }}
+                  className="bg-white rounded-2xl p-6 shadow-sm mb-6"
+                >
+                  <div className="flex items-center gap-2 mb-5">
+                    <TrendingUp className="w-4 h-4 text-brand-red" />
+                    <h3 className="font-ui font-black text-[15px]">مؤشرات عدم التمسك</h3>
+                  </div>
+                  {/* Top numbers */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div className="text-center bg-brand-red/5 rounded-xl p-4">
+                      <p className="font-display font-black text-[32px] text-brand-red">{rf.length}</p>
+                      <p className="font-ui font-bold text-[12px] text-neutral-muted">إجمالي المرشحين</p>
+                    </div>
+                    <div className="text-center bg-neutral-cream/60 rounded-xl p-4">
+                      <p className="font-display font-black text-[32px] text-brand-black">{avgPct}%</p>
+                      <p className="font-ui font-bold text-[12px] text-neutral-muted">متوسط نسبة الدرب</p>
+                    </div>
+                    <div className="text-center bg-brand-green/5 rounded-xl p-4">
+                      <p className="font-display font-black text-[32px] text-brand-green">{retainYes}</p>
+                      <p className="font-ui font-bold text-[12px] text-neutral-muted">تمسك</p>
+                    </div>
+                    <div className="text-center bg-brand-red/5 rounded-xl p-4">
+                      <p className="font-display font-black text-[32px] text-brand-red">{retainNo}</p>
+                      <p className="font-ui font-bold text-[12px] text-neutral-muted">عدم تمسك</p>
+                    </div>
+                  </div>
+                  {/* Track breakdown */}
+                  <div className="flex flex-wrap gap-2 mb-5">
+                    {Object.entries(trackBreakdown).sort(([,a],[,b]) => b - a).map(([track, count]) => (
+                      <div key={track} className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ backgroundColor: `${TRACK_COLORS[track] || '#94a3b8'}15` }}>
+                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: TRACK_COLORS[track] || '#94a3b8' }} />
+                        <span className="font-ui font-black text-[13px]" style={{ color: TRACK_COLORS[track] || '#94a3b8' }}>{track}</span>
+                        <span className="font-display font-black text-[15px] text-brand-black">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Department breakdown */}
+                  <div className="space-y-2">
+                    {topDepts.map(([dept, count]) => {
+                      const pct = Math.round((count / rf.length) * 100);
+                      return (
+                        <div key={dept} className="flex items-center gap-3">
+                          <span className="font-ui font-black text-[12px] text-brand-black w-28 text-right truncate">{dept}</span>
+                          <div className="flex-1 bg-neutral-cream rounded-full h-3 overflow-hidden">
+                            <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ delay: 0.7, duration: 0.6 }}
+                              className="h-full bg-brand-red/60 rounded-full" />
+                          </div>
+                          <span className="font-ui font-black text-[12px] text-neutral-muted w-8">{count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              );
+            })()}
 
             {/* ── World Map ── */}
             {(Object.keys(stats.locationDistribution).length > 0 || Object.keys(stats.nationalityDistribution).length > 0) && (
