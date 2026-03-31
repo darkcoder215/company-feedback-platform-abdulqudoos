@@ -378,7 +378,11 @@ export default function InsightsPage() {
               )}
             </div>
 
-            <InsightBox text={`${pipeline.funnel[3]?.count || 0} موظف تم ترسيمهم من أصل ${pipeline.funnel[0]?.count || 0} — معدل تحويل ${pipeline.funnel[0]?.count ? Math.round(((pipeline.funnel[3]?.count || 0) / pipeline.funnel[0].count) * 100) : 0}%`} />
+            <div className="mt-4 bg-neutral-cream rounded-xl p-4">
+              <p className="font-ui font-bold text-[13px] text-neutral-muted">
+                <span className="text-brand-green font-black">💡 </span>{pipeline.funnel[3]?.count || 0} موظف تم ترسيمهم من أصل {pipeline.funnel[0]?.count || 0} — معدل تحويل <span className="text-brand-green font-black bg-brand-green/10 px-1.5 py-0.5 rounded">{pipeline.funnel[0]?.count ? Math.round(((pipeline.funnel[3]?.count || 0) / pipeline.funnel[0].count) * 100) : 0}%</span>
+              </p>
+            </div>
           </motion.section>
         )}
 
@@ -542,7 +546,11 @@ export default function InsightsPage() {
               </div>
             )}
 
-            <InsightBox text={`أضعف معيار: ${skills.bottom3[0]?.label || '-'} بمتوسط ${skills.bottom3[0]?.score.toFixed(1) || '0'}/٥ — فرصة تدريب مباشرة`} />
+            <div className="mt-4 bg-neutral-cream rounded-xl p-4">
+              <p className="font-ui font-bold text-[13px] text-neutral-muted">
+                <span className="text-brand-green font-black">💡 </span>أضعف معيار: {skills.bottom3[0]?.label || '-'} بمتوسط <span className="text-brand-green font-black bg-brand-green/10 px-1.5 py-0.5 rounded">{skills.bottom3[0]?.score.toFixed(1) || '0'}/٥</span> — فرصة تدريب مباشرة
+              </p>
+            </div>
           </motion.section>
         )}
 
