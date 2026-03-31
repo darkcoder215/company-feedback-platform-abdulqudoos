@@ -686,6 +686,122 @@ export default function InsightsPage() {
           </motion.section>
         )}
 
+        {/* ── 9. Station Meetings ── */}
+        {activeData.stationMeetings && activeData.stationMeetings.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-50px' }}
+            className="bg-white rounded-2xl p-8 shadow-sm"
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-cyan-50 flex items-center justify-center">
+                <ClipboardCheck className="w-5 h-5 text-cyan-600" />
+              </div>
+              <div>
+                <h2 className="font-ui font-black text-[18px]">اجتماعات المحطة</h2>
+                <p className="font-ui font-bold text-[13px] text-neutral-muted">{activeData.stationMeetings.length} اجتماع مسجل</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-neutral-cream/60 rounded-xl p-4 text-center">
+                <p className="font-display font-black text-[28px] text-brand-blue">{new Set(activeData.stationMeetings.map((s) => s.employeeName)).size}</p>
+                <p className="font-ui font-bold text-[12px] text-neutral-muted">موظف</p>
+              </div>
+              <div className="bg-neutral-cream/60 rounded-xl p-4 text-center">
+                <p className="font-display font-black text-[28px] text-brand-green">{activeData.stationMeetings.filter((s) => s.meetingStatus === 'مكتمل' || s.meetingStatus === 'Completed' || s.meetingStatus === 'معتمد' || s.approvalDate).length}</p>
+                <p className="font-ui font-bold text-[12px] text-neutral-muted">مكتمل</p>
+              </div>
+              <div className="bg-neutral-cream/60 rounded-xl p-4 text-center">
+                <p className="font-display font-black text-[28px] text-brand-amber">{activeData.stationMeetings.filter((s) => s.isManager).length}</p>
+                <p className="font-ui font-bold text-[12px] text-neutral-muted">مدير</p>
+              </div>
+              <div className="bg-neutral-cream/60 rounded-xl p-4 text-center">
+                <p className="font-display font-black text-[28px] text-brand-burgundy" style={{color: '#82003A'}}>{new Set(activeData.stationMeetings.map((s) => s.season).filter(Boolean)).size}</p>
+                <p className="font-ui font-bold text-[12px] text-neutral-muted">موسم</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── 10. Retention Risk ── */}
+        {activeData.retentionFlags && activeData.retentionFlags.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-50px' }}
+            className="bg-white rounded-2xl p-8 shadow-sm"
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-brand-red" />
+              </div>
+              <div>
+                <h2 className="font-ui font-black text-[18px]">مخاطر عدم التمسك</h2>
+                <p className="font-ui font-bold text-[13px] text-neutral-muted">{activeData.retentionFlags.length} موظف</p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {activeData.retentionFlags.map((rf, i) => (
+                <motion.div key={rf.id || i} initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}
+                  transition={{ delay: i * 0.05 }}
+                  className="flex items-start gap-4 p-4 rounded-xl border border-brand-red/10 bg-brand-red/5"
+                >
+                  <div className="flex-1">
+                    <p className="font-ui font-black text-[14px]">{rf.employeeName}</p>
+                    <p className="font-ui font-bold text-[12px] text-neutral-muted">{rf.department} — {rf.generalTrack} ({rf.generalTrackPercent}%)</p>
+                    {rf.managerJustification && (
+                      <p className="font-ui font-bold text-[12px] text-brand-red/70 mt-1">{rf.managerJustification}</p>
+                    )}
+                  </div>
+                  <div className="px-3 py-1 rounded-lg bg-brand-red/10 text-brand-red font-ui font-black text-[12px] flex-shrink-0">
+                    {rf.retainEmployee || 'لا'}
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── 11. Leader Analysis ── */}
+        {activeData.leaderAnalyses && activeData.leaderAnalyses.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-50px' }}
+            className="bg-white rounded-2xl p-8 shadow-sm"
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center">
+                <Award className="w-5 h-5" style={{ color: '#7C3AED' }} />
+              </div>
+              <div>
+                <h2 className="font-ui font-black text-[18px]">تحليل القادة</h2>
+                <p className="font-ui font-bold text-[13px] text-neutral-muted">{activeData.leaderAnalyses.length} تحليل قيادي</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {activeData.leaderAnalyses.map((la, i) => (
+                <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+                  transition={{ delay: i * 0.08 }}
+                  className="rounded-xl border border-neutral-warm-gray/30 p-5"
+                >
+                  <h4 className="font-ui font-black text-[16px] mb-3" style={{ color: '#7C3AED' }}>{la.leaderName}</h4>
+                  {la.strengths && (
+                    <div className="mb-2">
+                      <span className="font-ui font-black text-[12px] text-brand-green">نقاط القوة: </span>
+                      <span className="font-ui font-bold text-[12px] text-neutral-muted">{la.strengths.slice(0, 150)}{la.strengths.length > 150 ? '...' : ''}</span>
+                    </div>
+                  )}
+                  {la.weaknesses && (
+                    <div className="mb-2">
+                      <span className="font-ui font-black text-[12px] text-brand-red">نقاط التحسين: </span>
+                      <span className="font-ui font-bold text-[12px] text-neutral-muted">{la.weaknesses.slice(0, 150)}{la.weaknesses.length > 150 ? '...' : ''}</span>
+                    </div>
+                  )}
+                  {la.recommendations && (
+                    <div>
+                      <span className="font-ui font-black text-[12px] text-brand-blue">التوصيات: </span>
+                      <span className="font-ui font-bold text-[12px] text-neutral-muted">{la.recommendations.slice(0, 150)}{la.recommendations.length > 150 ? '...' : ''}</span>
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
       </div>
     </div>
   );

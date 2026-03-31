@@ -580,6 +580,36 @@ export default function DashboardPage() {
               </motion.div>
             )}
 
+            {/* ── Retention Flags Summary ── */}
+            {activeData.retentionFlags.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.62 }}
+                className="bg-white rounded-2xl p-6 shadow-sm mb-6"
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <TrendingUp className="w-4 h-4 text-brand-red" />
+                  <h3 className="font-ui font-black text-[15px]">مؤشرات عدم التمسك</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {activeData.retentionFlags.slice(0, 6).map((rf, i) => (
+                    <motion.div key={rf.id || i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 + i * 0.05 }}
+                      className="rounded-xl border-2 border-brand-red/10 bg-brand-red/5 p-4"
+                    >
+                      <p className="font-ui font-black text-[14px] text-brand-black mb-1">{rf.employeeName}</p>
+                      <p className="font-ui font-bold text-[12px] text-neutral-muted mb-2">{rf.department} — الدرب: {rf.generalTrack}</p>
+                      {rf.managerJustification && (
+                        <p className="font-ui font-bold text-[11px] text-brand-red/80 line-clamp-2">{rf.managerJustification}</p>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+                {activeData.retentionFlags.length > 6 && (
+                  <p className="font-ui font-bold text-[12px] text-neutral-muted text-center mt-3">
+                    +{activeData.retentionFlags.length - 6} سجلات أخرى
+                  </p>
+                )}
+              </motion.div>
+            )}
+
             {/* ── World Map ── */}
             {(Object.keys(stats.locationDistribution).length > 0 || Object.keys(stats.nationalityDistribution).length > 0) && (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 }}
