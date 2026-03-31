@@ -23,7 +23,7 @@ import { getTrafficLightColor } from '@/lib/scoring';
 
 export default function DashboardPage() {
   const [showUpload, setShowUpload] = useState(false);
-  const { data, hasData } = useData();
+  const { data, hasData, isLoading } = useData();
 
   const stats = useMemo(
     () => getOverallStats(data.employees, data.evaluations),
@@ -57,9 +57,19 @@ export default function DashboardPage() {
       <TopBar title="لوحة التحكم" />
 
       <div className="p-8">
+        {/* Loading state */}
+        {isLoading && (
+          <div className="flex items-center justify-center py-20">
+            <div className="text-center">
+              <div className="w-12 h-12 border-4 border-brand-green border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+              <p className="font-ui font-bold text-[16px] text-neutral-muted">جاري تحميل البيانات...</p>
+            </div>
+          </div>
+        )}
+
         {/* Upload section - always show if no data, or if explicitly opened */}
         <AnimatePresence>
-          {(!hasData || showUpload) && (
+          {!isLoading && (!hasData || showUpload) && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -144,6 +154,38 @@ export default function DashboardPage() {
                   icon={TrendingUp}
                   color="#0072F9"
                   delay={0.5}
+                />
+              </div>
+            )}
+
+            {/* Leader evaluations summary */}
+            {data.leaders.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <StatCard
+                  title="تقييمات القادة"
+                  value={data.leaders.length}
+                  subtitle="تقييم ٣٦٠°"
+                  icon={Star}
+                  color="#0072F9"
+                  delay={0.35}
+                />
+                <StatCard
+                  title="قادة تم تقييمهم"
+                  value={new Set(data.leaders.map(l => l.leaderName)).size}
+                  subtitle="قائد"
+                  icon={Users}
+                  color="#00C17A"
+                  delay={0.4}
+                />
+                <StatCard
+                  title="متوسط التقييم"
+                  value={(() => {
+                    const avg = data.leaders.reduce((sum, l) => sum + l.averageScore, 0) / data.leaders.length;
+                    return `${avg.toFixed(1)} / 10`;
+                  })()}
+                  icon={TrendingUp}
+                  color="#FFBC0A"
+                  delay={0.45}
                 />
               </div>
             )}

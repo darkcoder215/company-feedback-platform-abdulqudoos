@@ -18,7 +18,7 @@ import { useAuth } from '@/context/AuthContext';
 import Badge from '@/components/ui/Badge';
 
 interface SearchResult {
-  type: 'employee' | 'review' | 'evaluation';
+  type: 'employee' | 'review' | 'evaluation' | 'leader';
   id: string;
   title: string;
   subtitle: string;
@@ -117,6 +117,27 @@ export default function SearchPage() {
       }
     }
 
+    // Search leader evaluations
+    if (canViewReviews) {
+      for (const ldr of data.leaders) {
+        const fields = [ldr.leaderName, ldr.evaluatorName, ldr.clarityComments,
+          ldr.workMethodComments, ldr.teamLeadershipComments, ldr.developmentComments, ldr.generalComments].join(' ');
+
+        if (fields.toLowerCase().includes(q) || fields.includes(query)) {
+          items.push({
+            type: 'leader',
+            id: ldr.id,
+            title: ldr.leaderName,
+            subtitle: `تقييم قيادة ٣٦٠° — المقيّم: ${ldr.evaluatorName}`,
+            details: [
+              `المتوسط: ${ldr.averageScore.toFixed(1)} / ١٠`,
+            ],
+            score: ldr.averageScore,
+          });
+        }
+      }
+    }
+
     return items;
   }, [query, data, isDepartmentOnly, userDepartment, canViewReviews]);
 
@@ -125,6 +146,7 @@ export default function SearchPage() {
       case 'employee': return User;
       case 'review': return Star;
       case 'evaluation': return ClipboardCheck;
+      case 'leader': return Building2;
       default: return Search;
     }
   };
@@ -134,6 +156,7 @@ export default function SearchPage() {
       case 'employee': return 'موظف';
       case 'review': return 'تقييم أداء';
       case 'evaluation': return 'فترة تجربة';
+      case 'leader': return 'تقييم قيادة';
       default: return '';
     }
   };
@@ -143,6 +166,7 @@ export default function SearchPage() {
       case 'employee': return 'info';
       case 'review': return 'success';
       case 'evaluation': return 'warning';
+      case 'leader': return 'info';
       default: return 'info';
     }
   };

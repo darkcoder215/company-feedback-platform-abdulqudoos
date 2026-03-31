@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { Employee, Evaluation, PerformanceReview, FileType, ParseResult } from './types';
+import { Employee, Evaluation, PerformanceReview, LeaderEvaluation, FileType, ParseResult } from './types';
 import { parseScoreFromText, parseTrafficLight, parseFinalDecision } from './scoring';
 
 // ── Column mappings ──
@@ -38,6 +38,7 @@ const EMPLOYEE_COLUMN_MAP: Record<string, keyof Employee> = {
 const EMPLOYEE_KEYWORDS = ['الاسم', 'الإدارة', 'الفريق', 'المستوى', 'المسمّى الوظيفي'];
 const EVALUATION_KEYWORDS = ['اسم الموظف', 'النتيجة', 'القرار', 'الانطباع', 'التفاعل والبداية', 'الأداء والجودة'];
 const REVIEW_KEYWORDS = ['الدرب العام', 'درجة_الدرب_العام', 'القائد المباشر', 'درب القيادة', 'كيف جودة المخرجات'];
+const LEADER_KEYWORDS = ['أود تقييم', 'مُديري فعّال', 'مُديري يحدد الأولويات', 'متوسط التقييم'];
 
 const EVAL_COLUMNS = {
   submissionId: 'Submission ID',
@@ -82,7 +83,11 @@ const EVAL_COLUMNS = {
 function detectFileType(headers: string[]): FileType {
   const headerStr = headers.join(' ');
 
-  // Check for Ananas reviews first (most specific)
+  // Check for leader evaluations first
+  const leaderMatches = LEADER_KEYWORDS.filter(kw => headerStr.includes(kw)).length;
+  if (leaderMatches >= 2) return 'leaders';
+
+  // Check for Ananas reviews (most specific)
   const reviewMatches = REVIEW_KEYWORDS.filter(kw => headerStr.includes(kw)).length;
   if (reviewMatches >= 2) return 'reviews';
 
@@ -476,6 +481,143 @@ function parseReviews(data: unknown[][]): PerformanceReview[] {
   return reviews;
 }
 
+function parseLeaders(data: unknown[][]): LeaderEvaluation[] {
+  if (data.length < 2) return [];
+  const headers = data[0].map(h => String(h || '').trim());
+  const leaders: LeaderEvaluation[] = [];
+
+  const col = (search: string) => findColumnIndex(headers, search);
+
+  const c = {
+    submissionId: col('Submission ID'),
+    submittedAt: col('Submitted at'),
+    evaluatorName: col('أنا'),
+    leaderName: col('أود تقييم'),
+    communication: col('مُديري فعّال في توصيل'),
+    prioritization: col('مُديري يحدد الأولويات'),
+    decisionMaking: col('مُديري يتخذ قرارات'),
+    goalSetting: col('مُديري يبني ويضع أهداف'),
+    clarityComments: headers.findIndex(h => h && h.includes('الوضوح والأولويات')),
+    empowerment: col('مُديري يُمكّن'),
+    delegation: col('مُديري يحسن في تفويض'),
+    support: col('مُديري يقدم يد العون'),
+    emotionalIntelligence: col('مُديري لديه وعي ذاتي'),
+    workMethodComments: headers.findIndex(h => h && h.includes('طريقة العمل')),
+    morale: col('مُديري يؤثر في معنويات'),
+    collaboration: col('مُديري يشجع ويسهل التعاون'),
+    environment: col('مُديري يعمل على تعزيز بيئة'),
+    inclusion: col('مُديري يُشرك الفريق'),
+    teamLeadershipComments: headers.findIndex(h => h && h.includes('قيادة الفريق')),
+    development: col('مُديري يستثمر وقتاً'),
+    feedback: col('مُديري يشاركني مرئيات'),
+    performance: col('مُديري يساهم في رفع'),
+    creativity: col('مُديري يشجع ويدعم التفكير'),
+    developmentComments: headers.findIndex(h => h && h.includes('الدعم والتطوير')),
+    generalComments: headers.findIndex(h => h && h.includes('تودّ مشاركته مع مديرك')),
+    hrComments: headers.findIndex(h => h && h.includes('مع الموارد البشرية')),
+    averageScore: col('متوسط التقييم'),
+  };
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row || row.length === 0) continue;
+
+    const leaderName = getCellValue(row, c.leaderName);
+    if (!leaderName) continue;
+
+    const getNum = (idx: number) => parseFloat(getCellValue(row, idx)) || 0;
+
+    leaders.push({
+      id: `ldr-${i}`,
+      submissionId: getCellValue(row, c.submissionId),
+      submittedAt: getCellValue(row, c.submittedAt),
+      evaluatorName: getCellValue(row, c.evaluatorName),
+      leaderName,
+      communication: getNum(c.communication),
+      prioritization: getNum(c.prioritization),
+      decisionMaking: getNum(c.decisionMaking),
+      goalSetting: getNum(c.goalSetting),
+      clarityComments: getCellValue(row, c.clarityComments),
+      empowerment: getNum(c.empowerment),
+      delegation: getNum(c.delegation),
+      support: getNum(c.support),
+      emotionalIntelligence: getNum(c.emotionalIntelligence),
+      workMethodComments: getCellValue(row, c.workMethodComments),
+      morale: getNum(c.morale),
+      collaboration: getNum(c.collaboration),
+      environment: getNum(c.environment),
+      inclusion: getNum(c.inclusion),
+      teamLeadershipComments: getCellValue(row, c.teamLeadershipComments),
+      development: getNum(c.development),
+      feedback: getNum(c.feedback),
+      performance: getNum(c.performance),
+      creativity: getNum(c.creativity),
+      developmentComments: getCellValue(row, c.developmentComments),
+      generalComments: getCellValue(row, c.generalComments),
+      hrComments: getCellValue(row, c.hrComments),
+      averageScore: getNum(c.averageScore),
+    });
+  }
+
+  return leaders;
+}
+
+export function parseBuffer(buffer: ArrayBuffer): ParseResult {
+  try {
+    // Detect if this is a CSV/text file (not XLSX/XLS which start with PK or other binary signatures)
+    const bytes = new Uint8Array(buffer);
+    const isXlsx = bytes[0] === 0x50 && bytes[1] === 0x4B; // PK signature (ZIP/XLSX)
+    const isXls = bytes[0] === 0xD0 && bytes[1] === 0xCF;  // OLE2 signature (XLS)
+
+    let workbook: XLSX.WorkBook;
+    if (!isXlsx && !isXls) {
+      // CSV/text file — decode as UTF-8 first to preserve Arabic text
+      const text = new TextDecoder('utf-8').decode(buffer);
+      workbook = XLSX.read(text, { type: 'string' });
+    } else {
+      workbook = XLSX.read(buffer, { type: 'array' });
+    }
+
+    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as unknown[][];
+
+    if (data.length === 0) {
+      return { type: 'unknown', error: 'الملف فارغ' };
+    }
+
+    let headerRowIdx = 0;
+    for (let i = 0; i < Math.min(data.length, 5); i++) {
+      const row = data[i];
+      if (row && row.length > 3 && row.some(c => c && String(c).trim().length > 0)) {
+        const rowStr = row.map(c => String(c || '')).join(' ');
+        if (rowStr.includes('الاسم') || rowStr.includes('Submission') || rowStr.includes('اسم الموظف')) {
+          headerRowIdx = i;
+          break;
+        }
+      }
+    }
+
+    const actualData = data.slice(headerRowIdx);
+    const headers = actualData[0].map(h => String(h || ''));
+    const fileType = detectFileType(headers);
+
+    switch (fileType) {
+      case 'employees':
+        return { type: 'employees', employees: parseEmployees(actualData) };
+      case 'evaluations':
+        return { type: 'evaluations', evaluations: parseEvaluations(actualData) };
+      case 'reviews':
+        return { type: 'reviews', reviews: parseReviews(actualData) };
+      case 'leaders':
+        return { type: 'leaders', leaders: parseLeaders(actualData) };
+      default:
+        return { type: 'unknown', error: 'لم يتم التعرف على نوع الملف' };
+    }
+  } catch {
+    return { type: 'unknown', error: 'خطأ في قراءة الملف' };
+  }
+}
+
 export async function parseFile(file: File): Promise<ParseResult> {
   try {
     const buffer = await file.arrayBuffer();
@@ -487,16 +629,32 @@ export async function parseFile(file: File): Promise<ParseResult> {
       return { type: 'unknown', error: 'الملف فارغ' };
     }
 
-    const headers = data[0].map(h => String(h || ''));
+    // Some files have an empty first row; find the actual header row
+    let headerRowIdx = 0;
+    for (let i = 0; i < Math.min(data.length, 5); i++) {
+      const row = data[i];
+      if (row && row.length > 3 && row.some(c => c && String(c).trim().length > 0)) {
+        const rowStr = row.map(c => String(c || '')).join(' ');
+        if (rowStr.includes('الاسم') || rowStr.includes('Submission') || rowStr.includes('اسم الموظف')) {
+          headerRowIdx = i;
+          break;
+        }
+      }
+    }
+
+    const actualData = data.slice(headerRowIdx);
+    const headers = actualData[0].map(h => String(h || ''));
     const fileType = detectFileType(headers);
 
     switch (fileType) {
       case 'employees':
-        return { type: 'employees', employees: parseEmployees(data) };
+        return { type: 'employees', employees: parseEmployees(actualData) };
       case 'evaluations':
-        return { type: 'evaluations', evaluations: parseEvaluations(data) };
+        return { type: 'evaluations', evaluations: parseEvaluations(actualData) };
       case 'reviews':
-        return { type: 'reviews', reviews: parseReviews(data) };
+        return { type: 'reviews', reviews: parseReviews(actualData) };
+      case 'leaders':
+        return { type: 'leaders', leaders: parseLeaders(actualData) };
       default:
         return { type: 'unknown', error: 'لم يتم التعرف على نوع الملف. تأكد من أن الملف يحتوي على البيانات الصحيحة.' };
     }

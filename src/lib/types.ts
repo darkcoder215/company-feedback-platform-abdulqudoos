@@ -147,13 +147,47 @@ export interface PerformanceReview {
   matched: string;
 }
 
-export type FileType = 'employees' | 'evaluations' | 'reviews' | 'unknown';
+// ── Leader 360 Evaluations ──
+
+export interface LeaderEvaluation {
+  id: string;
+  submissionId: string;
+  submittedAt: string;
+  evaluatorName: string;
+  leaderName: string;
+  communication: number;
+  prioritization: number;
+  decisionMaking: number;
+  goalSetting: number;
+  clarityComments: string;
+  empowerment: number;
+  delegation: number;
+  support: number;
+  emotionalIntelligence: number;
+  workMethodComments: string;
+  morale: number;
+  collaboration: number;
+  environment: number;
+  inclusion: number;
+  teamLeadershipComments: string;
+  development: number;
+  feedback: number;
+  performance: number;
+  creativity: number;
+  developmentComments: string;
+  generalComments: string;
+  hrComments: string;
+  averageScore: number;
+}
+
+export type FileType = 'employees' | 'evaluations' | 'reviews' | 'leaders' | 'unknown';
 
 export interface ParseResult {
   type: FileType;
   employees?: Employee[];
   evaluations?: Evaluation[];
   reviews?: PerformanceReview[];
+  leaders?: LeaderEvaluation[];
   error?: string;
 }
 
@@ -175,6 +209,7 @@ export interface PlatformData {
   employees: Employee[];
   evaluations: Evaluation[];
   reviews: PerformanceReview[];
+  leaders: LeaderEvaluation[];
 }
 
 // ── Access Control ──

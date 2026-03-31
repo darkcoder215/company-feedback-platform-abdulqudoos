@@ -56,6 +56,7 @@ export default function FileUploader({ onClose }: { onClose?: () => void }) {
       case 'employees': return 'بيانات الموظفين';
       case 'evaluations': return 'تقييمات فترة التجربة';
       case 'reviews': return 'تقييمات الأداء (أناناس)';
+      case 'leaders': return 'تقييمات القادة (٣٦٠°)';
       default: return 'غير معروف';
     }
   };

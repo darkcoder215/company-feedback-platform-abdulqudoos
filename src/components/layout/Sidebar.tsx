@@ -26,6 +26,7 @@ export default function Sidebar() {
     { href: '/search', label: 'البحث الذكي', icon: Search, show: true },
     { href: '/employees', label: 'الموظفون', icon: Users, show: true },
     { href: '/reviews', label: 'تقييمات الأداء', icon: Star, show: canViewReviews },
+    { href: '/leaders', label: 'تقييمات القادة', icon: Shield, show: canViewReviews },
     { href: '/probation', label: 'فترات التجربة', icon: ClipboardCheck, show: canViewReviews },
     { href: '/departments', label: 'الإدارات', icon: Building2, show: true },
   ];

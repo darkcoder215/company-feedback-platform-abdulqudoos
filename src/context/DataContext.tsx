@@ -1,8 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { PlatformData } from '@/lib/types';
-import { parseFile } from '@/lib/parser';
+import { parseFile, parseBuffer } from '@/lib/parser';
 
 interface DataContextType {
   data: PlatformData;
@@ -15,10 +15,55 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
+const DATA_FILES = [
+  '/data/employees.csv',
+  '/data/probation.csv',
+  '/data/ananas.xlsx',
+  '/data/leaders.xlsx',
+];
+
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<PlatformData>({ employees: [], evaluations: [], reviews: [] });
-  const [isLoading, setIsLoading] = useState(false);
+  const [data, setData] = useState<PlatformData>({ employees: [], evaluations: [], reviews: [], leaders: [] });
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Auto-load data files on mount
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadStaticData() {
+      const newData: PlatformData = { employees: [], evaluations: [], reviews: [], leaders: [] };
+
+      for (const path of DATA_FILES) {
+        try {
+          const res = await fetch(path);
+          if (!res.ok) continue;
+          const buffer = await res.arrayBuffer();
+          const result = parseBuffer(buffer);
+
+          if (result.type === 'employees' && result.employees) {
+            newData.employees.push(...result.employees);
+          } else if (result.type === 'evaluations' && result.evaluations) {
+            newData.evaluations.push(...result.evaluations);
+          } else if (result.type === 'reviews' && result.reviews) {
+            newData.reviews.push(...result.reviews);
+          } else if (result.type === 'leaders' && result.leaders) {
+            newData.leaders.push(...result.leaders);
+          }
+        } catch {
+          // Skip files that fail to load
+        }
+      }
+
+      if (!cancelled) {
+        setData(newData);
+        setIsLoading(false);
+      }
+    }
+
+    loadStaticData();
+    return () => { cancelled = true; };
+  }, []);
 
   const uploadFile = useCallback(async (file: File) => {
     setIsLoading(true);
@@ -33,27 +78,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (result.type === 'employees' && result.employees) {
-        setData(prev => ({
-          ...prev,
-          employees: [...prev.employees, ...result.employees!],
-        }));
+        setData(prev => ({ ...prev, employees: [...prev.employees, ...result.employees!] }));
         return { type: 'employees', count: result.employees.length };
       }
 
       if (result.type === 'evaluations' && result.evaluations) {
-        setData(prev => ({
-          ...prev,
-          evaluations: [...prev.evaluations, ...result.evaluations!],
-        }));
+        setData(prev => ({ ...prev, evaluations: [...prev.evaluations, ...result.evaluations!] }));
         return { type: 'evaluations', count: result.evaluations.length };
       }
 
       if (result.type === 'reviews' && result.reviews) {
-        setData(prev => ({
-          ...prev,
-          reviews: [...prev.reviews, ...result.reviews!],
-        }));
+        setData(prev => ({ ...prev, reviews: [...prev.reviews, ...result.reviews!] }));
         return { type: 'reviews', count: result.reviews.length };
+      }
+
+      if (result.type === 'leaders' && result.leaders) {
+        setData(prev => ({ ...prev, leaders: [...prev.leaders, ...result.leaders!] }));
+        return { type: 'leaders', count: result.leaders.length };
       }
 
       setError('لم يتم التعرف على نوع الملف');
@@ -64,11 +105,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const clearData = useCallback(() => {
-    setData({ employees: [], evaluations: [], reviews: [] });
+    setData({ employees: [], evaluations: [], reviews: [], leaders: [] });
     setError(null);
   }, []);
 
-  const hasData = data.employees.length > 0 || data.evaluations.length > 0 || data.reviews.length > 0;
+  const hasData = data.employees.length > 0 || data.evaluations.length > 0 || data.reviews.length > 0 || data.leaders.length > 0;
 
   return (
     <DataContext.Provider value={{ data, isLoading, error, uploadFile, clearData, hasData }}>
