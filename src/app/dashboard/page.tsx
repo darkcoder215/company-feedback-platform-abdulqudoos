@@ -39,6 +39,7 @@ import TopBar from '@/components/layout/TopBar';
 import FileUploader from '@/components/upload/FileUploader';
 import StatCard from '@/components/dashboard/StatCard';
 import WorldMap from '@/components/dashboard/WorldMap';
+import OrgChart from '@/components/dashboard/OrgChart';
 import { useData } from '@/context/DataContext';
 import { getOverallStats, getEvaluationInsights } from '@/lib/analytics';
 
@@ -427,6 +428,19 @@ export default function DashboardPage() {
                   <h3 className="font-ui font-black text-[15px]">التوزيع الجغرافي للفريق</h3>
                 </div>
                 <WorldMap locationData={stats.locationDistribution} nationalityData={stats.nationalityDistribution} employees={data.employees} />
+              </motion.div>
+            )}
+
+            {/* ── Org Chart ── */}
+            {data.employees.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}
+                className="bg-white rounded-2xl p-6 shadow-sm mb-6"
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <Layers className="w-4 h-4 text-brand-burgundy" />
+                  <h3 className="font-ui font-black text-[15px]">الهيكل التنظيمي</h3>
+                </div>
+                <OrgChart employees={data.employees} />
               </motion.div>
             )}
 
