@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, ArrowRight, Users } from 'lucide-react';
+import { Search, X, ArrowRight, Users, Building2 } from 'lucide-react';
+import Link from 'next/link';
 import type { Employee } from '@/lib/types';
 
 // ── Color palette for departments ──
@@ -111,6 +112,157 @@ function ConnectionLine({ x1, y1, x2, y2, color, delay = 0 }: { x1: number; y1: 
       animate={{ pathLength: 1, opacity: 0.35 }}
       transition={{ duration: 0.6, delay }}
     />
+  );
+}
+
+function SolidConnectionLine({ x1, y1, x2, y2, color, delay = 0 }: { x1: number; y1: number; x2: number; y2: number; color: string; delay?: number }) {
+  return (
+    <motion.line
+      x1={x1} y1={y1} x2={x2} y2={y2}
+      stroke={color}
+      strokeWidth={1.5}
+      opacity={0.45}
+      initial={{ pathLength: 0, opacity: 0 }}
+      animate={{ pathLength: 1, opacity: 0.45 }}
+      transition={{ duration: 0.6, delay }}
+    />
+  );
+}
+
+// ── People mode: manager hierarchy data ──
+interface ManagerNode {
+  employee: Employee;
+  directReports: Employee[];
+}
+
+function buildManagerHierarchy(employees: Employee[]): {
+  rootManagers: ManagerNode[];
+  managerMap: Map<string, ManagerNode>;
+  employeeByName: Map<string, Employee>;
+} {
+  const employeeByName = new Map<string, Employee>();
+  employees.forEach(emp => {
+    employeeByName.set(emp.name, emp);
+  });
+
+  // Build direct reports map: managerName -> employees who report to them
+  const directReportsMap = new Map<string, Employee[]>();
+  employees.forEach(emp => {
+    const mgr = emp.manager?.trim();
+    if (mgr) {
+      if (!directReportsMap.has(mgr)) directReportsMap.set(mgr, []);
+      directReportsMap.get(mgr)!.push(emp);
+    }
+  });
+
+  // Build manager nodes for employees who have direct reports
+  const managerMap = new Map<string, ManagerNode>();
+  employees.forEach(emp => {
+    const reports = directReportsMap.get(emp.name) || [];
+    if (reports.length > 0) {
+      managerMap.set(emp.name, { employee: emp, directReports: reports });
+    }
+  });
+
+  // Root managers: managers whose own manager is not in the employee list
+  const rootManagers: ManagerNode[] = [];
+  managerMap.forEach((node) => {
+    const mgrName = node.employee.manager?.trim();
+    if (!mgrName || !employeeByName.has(mgrName)) {
+      rootManagers.push(node);
+    }
+  });
+
+  // Also add employees with no manager who aren't in managerMap but have no manager at all
+  // (standalone top-level people who manage nobody but have no manager — skip these, they appear as leaf nodes)
+
+  // Sort root managers by number of reports descending
+  rootManagers.sort((a, b) => b.directReports.length - a.directReports.length);
+
+  return { rootManagers, managerMap, employeeByName };
+}
+
+function PersonBubble({
+  emp,
+  directReportCount,
+  cx,
+  cy,
+  r,
+  color,
+  delay,
+  isHighlighted,
+  isSearchMatch,
+  isManager,
+  onHover,
+  onLeave,
+  onClick,
+}: {
+  emp: Employee;
+  directReportCount: number;
+  cx: number;
+  cy: number;
+  r: number;
+  color: string;
+  delay: number;
+  isHighlighted: boolean;
+  isSearchMatch: boolean;
+  isManager: boolean;
+  onHover: () => void;
+  onLeave: () => void;
+  onClick: () => void;
+}) {
+  const maxChars = Math.max(5, Math.floor(r / 4.5));
+  const displayName = emp.preferredName || emp.name;
+
+  return (
+    <motion.g
+      initial={{ scale: 0, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ scale: 0, opacity: 0 }}
+      transition={{ type: 'spring', stiffness: 200, damping: 18, delay }}
+      style={{ cursor: 'pointer' }}
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+      onClick={onClick}
+    >
+      {isSearchMatch && (
+        <motion.circle
+          cx={cx} cy={cy} r={r + 5}
+          fill="none"
+          stroke="#00C17A"
+          strokeWidth={2.5}
+          animate={{ r: [r + 5, r + 8, r + 5] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+        />
+      )}
+      {isHighlighted && !isSearchMatch && (
+        <motion.circle
+          cx={cx} cy={cy} r={r + 3}
+          fill="none"
+          stroke={color}
+          strokeWidth={1.5}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.5 }}
+        />
+      )}
+      {/* Main bubble */}
+      <circle cx={cx} cy={cy} r={r} fill={color} opacity={0.15} />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={isManager ? 2.5 : 1.5} />
+      {/* Name */}
+      <text x={cx} y={cy - (directReportCount > 0 ? 10 : 3)} textAnchor="middle" fill={color} fontSize={Math.min(11, r / 2.5)} fontWeight={800} fontFamily="inherit">
+        {truncateText(displayName, maxChars)}
+      </text>
+      {/* Job title */}
+      <text x={cx} y={cy + 3} textAnchor="middle" fill={color} fontSize={Math.min(8, r / 3.5)} fontWeight={500} opacity={0.7} fontFamily="inherit">
+        {truncateText(emp.jobTitleAr || '', Math.max(8, maxChars + 2))}
+      </text>
+      {/* Direct reports count */}
+      {directReportCount > 0 && (
+        <text x={cx} y={cy + 15} textAnchor="middle" fill={color} fontSize={Math.min(9, r / 3)} fontWeight={600} opacity={0.6} fontFamily="inherit">
+          {directReportCount} تابع
+        </text>
+      )}
+    </motion.g>
   );
 }
 
@@ -362,8 +514,10 @@ function Tooltip({ info, x, y, containerRef }: { info: { title: string; subtitle
 
 // ── Main OrgChart Component ──
 export default function OrgChart({ employees }: { employees: Employee[] }) {
+  const [viewMode, setViewMode] = useState<'departments' | 'people'>('departments');
   const [selectedDept, setSelectedDept] = useState<string | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
+  const [selectedManager, setSelectedManager] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [hoveredNode, setHoveredNode] = useState<{ info: { title: string; subtitle?: string; detail?: string; color: string }; x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -371,6 +525,9 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
   // Build department data
   const departments = useMemo(() => buildDeptData(employees), [employees]);
   const deptColors = useMemo(() => getDeptColorMap(departments.map(d => d.name)), [departments]);
+
+  // Build manager hierarchy for people mode
+  const { rootManagers, managerMap, employeeByName } = useMemo(() => buildManagerHierarchy(employees), [employees]);
 
   // Search matching
   const searchMatches = useMemo(() => {
@@ -383,6 +540,11 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
         matches.add(emp.id);
         matches.add(`dept:${emp.department || 'بدون قسم'}`);
         matches.add(`team:${emp.department || 'بدون قسم'}:${emp.team || 'عام'}`);
+        // People mode: mark the employee's manager as a search match too
+        if (emp.manager) {
+          matches.add(`manager:${emp.manager}`);
+        }
+        matches.add(`person:${emp.name}`);
       }
     });
     return matches;
@@ -390,8 +552,7 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
 
   // Auto-navigate to department when searching
   useEffect(() => {
-    if (searchMatches.size > 0 && !selectedDept) {
-      // Find the first matching department
+    if (searchMatches.size > 0 && viewMode === 'departments' && !selectedDept) {
       for (const key of searchMatches) {
         if (key.startsWith('dept:')) {
           setSelectedDept(key.replace('dept:', ''));
@@ -399,15 +560,33 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
         }
       }
     }
-  }, [searchMatches, selectedDept]);
+    if (searchMatches.size > 0 && viewMode === 'people' && !selectedManager) {
+      // Auto-navigate to the first matching manager
+      for (const key of searchMatches) {
+        if (key.startsWith('manager:')) {
+          const mgrName = key.replace('manager:', '');
+          if (managerMap.has(mgrName)) {
+            setSelectedManager(mgrName);
+            break;
+          }
+        }
+      }
+    }
+  }, [searchMatches, selectedDept, selectedManager, viewMode, managerMap]);
 
   const handleBack = useCallback(() => {
-    if (selectedTeam) {
-      setSelectedTeam(null);
-    } else if (selectedDept) {
-      setSelectedDept(null);
+    if (viewMode === 'departments') {
+      if (selectedTeam) {
+        setSelectedTeam(null);
+      } else if (selectedDept) {
+        setSelectedDept(null);
+      }
+    } else {
+      if (selectedManager) {
+        setSelectedManager(null);
+      }
     }
-  }, [selectedDept, selectedTeam]);
+  }, [viewMode, selectedDept, selectedTeam, selectedManager]);
 
   // ── SVG dimensions ──
   const SVG_W = 800;
@@ -645,12 +824,182 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
     );
   };
 
+  // ── People mode: Overview — root managers around center ──
+  const renderPeopleOverview = () => {
+    if (rootManagers.length === 0) return null;
+    const counts = rootManagers.map(m => m.directReports.length);
+    const minCount = Math.min(...counts);
+    const maxCount = Math.max(...counts);
+    const orbitR = Math.min(SVG_W, SVG_H) * 0.32;
+    const minBubbleR = 30;
+    const maxBubbleR = 55;
+    const angleStep = 360 / rootManagers.length;
+
+    return (
+      <>
+        {rootManagers.map((node, i) => {
+          const angle = i * angleStep;
+          const pos = polarToCartesian(CENTER_X, CENTER_Y, orbitR, angle);
+          const color = deptColors[node.employee.department || 'بدون قسم'] || '#0072F9';
+          return (
+            <SolidConnectionLine
+              key={`pline-${node.employee.name}`}
+              x1={CENTER_X} y1={CENTER_Y}
+              x2={pos.x} y2={pos.y}
+              color={color}
+              delay={i * 0.05}
+            />
+          );
+        })}
+
+        <CenterBubble cx={CENTER_X} cy={CENTER_Y} r={CENTER_R} isActive={false} />
+
+        {rootManagers.map((node, i) => {
+          const angle = i * angleStep;
+          const pos = polarToCartesian(CENTER_X, CENTER_Y, orbitR, angle);
+          const r = bubbleRadius(node.directReports.length, minCount, maxCount, minBubbleR, maxBubbleR);
+          const color = deptColors[node.employee.department || 'بدون قسم'] || '#0072F9';
+          const isMatch = searchMatches.has(`person:${node.employee.name}`) || searchMatches.has(`manager:${node.employee.name}`);
+
+          return (
+            <PersonBubble
+              key={node.employee.name}
+              emp={node.employee}
+              directReportCount={node.directReports.length}
+              cx={pos.x}
+              cy={pos.y}
+              r={r}
+              color={color}
+              delay={0.1 + i * 0.06}
+              isHighlighted={hoveredNode?.info.title === (node.employee.preferredName || node.employee.name)}
+              isSearchMatch={isMatch}
+              isManager={true}
+              onHover={() => setHoveredNode({
+                info: {
+                  title: node.employee.preferredName || node.employee.name,
+                  subtitle: node.employee.jobTitleAr,
+                  detail: `${node.directReports.length} تابع · ${node.employee.department || ''}`,
+                  color,
+                },
+                x: pos.x, y: pos.y - r - 5,
+              })}
+              onLeave={() => setHoveredNode(null)}
+              onClick={() => { setSelectedManager(node.employee.name); setHoveredNode(null); }}
+            />
+          );
+        })}
+      </>
+    );
+  };
+
+  // ── People mode: Manager drill-down — direct reports around selected manager ──
+  const renderPersonView = () => {
+    const node = managerMap.get(selectedManager!);
+    if (!node) return null;
+
+    const mgr = node.employee;
+    const reports = node.directReports;
+    const color = deptColors[mgr.department || 'بدون قسم'] || '#0072F9';
+    const orbitR = Math.min(SVG_W, SVG_H) * 0.3;
+    const empR = Math.max(14, Math.min(28, 280 / reports.length));
+    const angleStep = 360 / reports.length;
+
+    return (
+      <>
+        {reports.map((emp, i) => {
+          const angle = i * angleStep;
+          const pos = polarToCartesian(CENTER_X, CENTER_Y, orbitR, angle);
+          const empColor = deptColors[emp.department || 'بدون قسم'] || color;
+          return (
+            <SolidConnectionLine
+              key={`prline-${emp.id}`}
+              x1={CENTER_X} y1={CENTER_Y}
+              x2={pos.x} y2={pos.y}
+              color={empColor}
+              delay={i * 0.04}
+            />
+          );
+        })}
+
+        {/* Manager center bubble */}
+        <motion.g
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+          style={{ cursor: 'pointer' }}
+          onClick={handleBack}
+        >
+          <circle cx={CENTER_X} cy={CENTER_Y} r={CENTER_R + 5} fill={color} opacity={0.12} />
+          <circle cx={CENTER_X} cy={CENTER_Y} r={CENTER_R + 5} fill="none" stroke={color} strokeWidth={2.5} />
+          <text x={CENTER_X} y={CENTER_Y - 12} textAnchor="middle" fill={color} fontSize={13} fontWeight={900} fontFamily="inherit">
+            {truncateText(mgr.preferredName || mgr.name, 12)}
+          </text>
+          <text x={CENTER_X} y={CENTER_Y + 4} textAnchor="middle" fill={color} fontSize={9} fontWeight={600} opacity={0.7} fontFamily="inherit">
+            {truncateText(mgr.jobTitleAr || '', 16)}
+          </text>
+          <text x={CENTER_X} y={CENTER_Y + 18} textAnchor="middle" fill={color} fontSize={9} fontWeight={600} opacity={0.5} fontFamily="inherit">
+            {reports.length} تابع
+          </text>
+        </motion.g>
+
+        {/* Direct report bubbles */}
+        {reports.map((emp, i) => {
+          const angle = i * angleStep;
+          const pos = polarToCartesian(CENTER_X, CENTER_Y, orbitR, angle);
+          const empColor = deptColors[emp.department || 'بدون قسم'] || color;
+          const isMatch = searchMatches.has(emp.id) || searchMatches.has(`person:${emp.name}`);
+          const hasReports = managerMap.has(emp.name);
+          const reportCount = managerMap.get(emp.name)?.directReports.length || 0;
+
+          return (
+            <PersonBubble
+              key={emp.id}
+              emp={emp}
+              directReportCount={reportCount}
+              cx={pos.x}
+              cy={pos.y}
+              r={empR}
+              color={empColor}
+              delay={0.08 + i * 0.04}
+              isHighlighted={hoveredNode?.info.title === (emp.preferredName || emp.name)}
+              isSearchMatch={isMatch}
+              isManager={hasReports}
+              onHover={() => setHoveredNode({
+                info: {
+                  title: emp.preferredName || emp.name,
+                  subtitle: emp.jobTitleAr,
+                  detail: `${emp.department || ''}${reportCount > 0 ? ` · ${reportCount} تابع` : ''}`,
+                  color: empColor,
+                },
+                x: pos.x, y: pos.y - empR - 5,
+              })}
+              onLeave={() => setHoveredNode(null)}
+              onClick={() => {
+                setHoveredNode(null);
+                if (hasReports) {
+                  setSelectedManager(emp.name);
+                } else {
+                  // Leaf employee — navigate to profile
+                  window.location.href = `/employees/${emp.id}`;
+                }
+              }}
+            />
+          );
+        })}
+      </>
+    );
+  };
+
   // Current breadcrumb label
   const breadcrumb = useMemo(() => {
+    if (viewMode === 'people') {
+      if (selectedManager) return selectedManager;
+      return null;
+    }
     if (selectedTeam && selectedDept) return `${selectedDept} / ${selectedTeam}`;
     if (selectedDept) return selectedDept;
     return null;
-  }, [selectedDept, selectedTeam]);
+  }, [viewMode, selectedDept, selectedTeam, selectedManager]);
 
   if (employees.length === 0) {
     return (
@@ -663,6 +1012,22 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
 
   return (
     <div ref={containerRef} className="relative">
+      {/* View mode toggle */}
+      <div className="flex gap-1 bg-neutral-cream rounded-xl p-1 mb-3">
+        <button
+          className={`flex-1 px-4 py-2 rounded-lg font-ui font-black text-[13px] transition-all ${viewMode === 'departments' ? 'bg-white shadow-sm text-brand-black' : 'text-neutral-muted'}`}
+          onClick={() => { setViewMode('departments'); setSelectedManager(null); setSearchQuery(''); }}
+        >
+          <Building2 className="w-3.5 h-3.5 inline ml-1.5" /> الأقسام
+        </button>
+        <button
+          className={`flex-1 px-4 py-2 rounded-lg font-ui font-black text-[13px] transition-all ${viewMode === 'people' ? 'bg-white shadow-sm text-brand-black' : 'text-neutral-muted'}`}
+          onClick={() => { setViewMode('people'); setSelectedDept(null); setSelectedTeam(null); setSearchQuery(''); }}
+        >
+          <Users className="w-3.5 h-3.5 inline ml-1.5" /> الأشخاص
+        </button>
+      </div>
+
       {/* Top bar: search + navigation */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
         {/* Search */}
@@ -733,11 +1098,11 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
       {/* Breadcrumb */}
       {breadcrumb && (
         <div className="mb-2 flex items-center gap-2">
-          <button onClick={() => { setSelectedDept(null); setSelectedTeam(null); }} className="font-ui font-bold text-[12px] text-brand-blue hover:underline">
+          <button onClick={() => { setSelectedDept(null); setSelectedTeam(null); setSelectedManager(null); }} className="font-ui font-bold text-[12px] text-brand-blue hover:underline">
             ثمانية
           </button>
           <span className="text-neutral-muted text-[12px]">/</span>
-          {selectedDept && (
+          {viewMode === 'departments' && selectedDept && (
             <button
               onClick={() => { setSelectedTeam(null); }}
               className={`font-ui font-bold text-[12px] ${selectedTeam ? 'text-brand-blue hover:underline' : 'text-brand-black'}`}
@@ -745,11 +1110,14 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
               {selectedDept}
             </button>
           )}
-          {selectedTeam && (
+          {viewMode === 'departments' && selectedTeam && (
             <>
               <span className="text-neutral-muted text-[12px]">/</span>
               <span className="font-ui font-bold text-[12px] text-brand-black">{selectedTeam}</span>
             </>
+          )}
+          {viewMode === 'people' && selectedManager && (
+            <span className="font-ui font-bold text-[12px] text-brand-black">{selectedManager}</span>
           )}
         </div>
       )}
@@ -770,19 +1138,29 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
           <rect width={SVG_W} height={SVG_H} fill="url(#grid)" />
 
           <AnimatePresence mode="wait">
-            {!selectedDept && (
+            {viewMode === 'departments' && !selectedDept && (
               <motion.g key="overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
                 {renderOverview()}
               </motion.g>
             )}
-            {selectedDept && !selectedTeam && (
+            {viewMode === 'departments' && selectedDept && !selectedTeam && (
               <motion.g key={`dept-${selectedDept}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
                 {renderDepartmentView()}
               </motion.g>
             )}
-            {selectedDept && selectedTeam && (
+            {viewMode === 'departments' && selectedDept && selectedTeam && (
               <motion.g key={`team-${selectedTeam}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
                 {renderTeamView()}
+              </motion.g>
+            )}
+            {viewMode === 'people' && !selectedManager && (
+              <motion.g key="people-overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+                {renderPeopleOverview()}
+              </motion.g>
+            )}
+            {viewMode === 'people' && selectedManager && (
+              <motion.g key={`person-${selectedManager}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+                {renderPersonView()}
               </motion.g>
             )}
           </AnimatePresence>
@@ -803,7 +1181,7 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
 
       {/* Legend */}
       <div className="mt-3 flex flex-wrap gap-2">
-        {departments.map(dept => (
+        {viewMode === 'departments' && departments.map(dept => (
           <button
             key={dept.name}
             onClick={() => { setSelectedDept(dept.name); setSelectedTeam(null); }}
@@ -812,6 +1190,17 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
             <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: deptColors[dept.name] }} />
             <span className="font-ui font-bold text-[11px] text-neutral-muted">{dept.name}</span>
             <span className="font-ui font-black text-[10px] text-neutral-muted/60">{dept.count}</span>
+          </button>
+        ))}
+        {viewMode === 'people' && rootManagers.map(node => (
+          <button
+            key={node.employee.name}
+            onClick={() => { setSelectedManager(node.employee.name); }}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-neutral-cream hover:border-brand-blue/30 transition-all"
+          >
+            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: deptColors[node.employee.department || 'بدون قسم'] || '#0072F9' }} />
+            <span className="font-ui font-bold text-[11px] text-neutral-muted">{node.employee.preferredName || node.employee.name}</span>
+            <span className="font-ui font-black text-[10px] text-neutral-muted/60">{node.directReports.length}</span>
           </button>
         ))}
       </div>

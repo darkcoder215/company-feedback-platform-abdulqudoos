@@ -1,875 +1,618 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Users, TrendingUp, AlertTriangle, Star, Shield, Award,
-  ThumbsUp, ThumbsDown, Clock, Target, Building2, ChevronDown,
-  Briefcase, MapPin, Layers, Calendar, ArrowUpRight, ArrowDownRight, BarChart3,
-} from 'lucide-react';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Cell, RadarChart, Radar,
-  PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  LineChart, Line, AreaChart, Area, Legend,
-} from 'recharts';
+import { useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { AlertTriangle, Shield, TrendingUp, Target, Users, BarChart3, Award, Briefcase, Star, UserCheck, Activity, Layers } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, PieChart, Pie, Cell, ReferenceLine } from 'recharts';
 import TopBar from '@/components/layout/TopBar';
-import WorldMap from '@/components/dashboard/WorldMap';
+import RadialScore from '@/components/charts/RadialScore';
 import { useData } from '@/context/DataContext';
-import { getOverallStats } from '@/lib/analytics';
+import {
+  computeOrgHealth,
+  computeTalentRisk,
+  generateRecommendations,
+  computeOnboardingPipeline,
+  computeLeadershipEffectiveness,
+  computeSkillGaps,
+  computeManagerCalibration,
+  computeWorkforceComposition,
+} from '@/lib/strategic-analytics';
 
-const COLORS = ['#0072F9', '#00C17A', '#FFBC0A', '#F24935', '#82003A', '#84DBE5', '#FF9172', '#D1C4E2', '#FFA5C6', '#FFD1C4'];
-const TRACK_COLORS: Record<string, string> = { 'فخر': '#00C17A', 'خضر': '#B2E2BA', 'صفر': '#FFBC0A', 'حمر': '#F24935', 'خطر': '#82003A' };
+const COLORS = ['#0072F9', '#00C17A', '#FFBC0A', '#F24935', '#82003A', '#84DBE5', '#FF9172', '#D1C4E2'];
+const PIE_COLORS = ['#0072F9', '#00C17A', '#FFBC0A', '#F24935', '#82003A', '#84DBE5', '#FF9172', '#D1C4E2'];
 
-type TabKey = 'overview' | 'departments' | 'leaders' | 'timeline';
-
-function Card({ children, delay = 0, className = '' }: { children: React.ReactNode; delay?: number; className?: string }) {
-  return (
-    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }}
-      className={`bg-white rounded-2xl p-6 shadow-sm ${className}`}>{children}</motion.div>
-  );
-}
-
-function Metric({ value, label, color = '#2B2D3F' }: { value: string | number; label: string; color?: string }) {
-  return (
-    <div className="text-center p-4">
-      <p className="font-display font-black text-[36px] leading-none" style={{ color }}>{value}</p>
-      <p className="font-ui font-bold text-[12px] text-neutral-muted mt-1">{label}</p>
-    </div>
-  );
-}
-
-const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name?: string }>; label?: string }) => {
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name?: string; dataKey?: string }>; label?: string }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-brand-black text-white px-4 py-2 rounded-lg shadow-lg font-ui text-[13px]">
       <p className="font-black">{label}</p>
-      {payload.map((p, i) => <p key={i} className="font-bold">{p.name ? `${p.name}: ` : ''}{typeof p.value === 'number' ? p.value.toFixed(1) : p.value}</p>)}
+      {payload.map((p, i) => (
+        <p key={i} className="font-bold">
+          {p.name ? `${p.name}: ` : ''}{typeof p.value === 'number' ? p.value.toFixed(1) : p.value}
+        </p>
+      ))}
     </div>
   );
 };
 
+function SectionHeader({ icon: Icon, title, subtitle, color }: { icon: React.ElementType; title: string; subtitle: string; color: string }) {
+  return (
+    <div className="flex items-center gap-3 mb-6">
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${color}15` }}>
+        <Icon className="w-5 h-5" style={{ color }} />
+      </div>
+      <div>
+        <h2 className="font-display font-black text-[20px]">{title}</h2>
+        <p className="font-ui font-bold text-[13px] text-neutral-muted">{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+function InsightBox({ text }: { text: string }) {
+  return (
+    <div className="mt-4 bg-neutral-cream rounded-xl p-4">
+      <p className="font-ui font-bold text-[13px] text-neutral-muted">
+        <span className="text-brand-green font-black">💡 </span>{text}
+      </p>
+    </div>
+  );
+}
+
+function getCalibrationColor(deviation: number): string {
+  const abs = Math.abs(deviation);
+  if (abs <= 0.5) return '#00C17A';
+  if (abs <= 1) return '#FFBC0A';
+  return '#F24935';
+}
+
+function getHeatmapColor(score: number): string {
+  if (score >= 4.5) return '#00C17A';
+  if (score >= 3.5) return '#B2E2BA';
+  if (score >= 2.5) return '#FFBC0A';
+  if (score >= 1.5) return '#FF9172';
+  if (score > 0) return '#F24935';
+  return '#EFEDE2';
+}
+
 export default function InsightsPage() {
   const { data } = useData();
-  const [activeTab, setActiveTab] = useState<TabKey>('overview');
-  const [selectedDept, setSelectedDept] = useState<string | null>(null);
-  const [selectedLeader, setSelectedLeader] = useState<string | null>(null);
 
-  const stats = useMemo(() => getOverallStats(data.employees, data.evaluations), [data.employees, data.evaluations]);
-
-  // ── Departments list ──
-  const departments = useMemo(() => {
-    const deptMap: Record<string, { employees: typeof data.employees; reviews: typeof data.reviews; leaders: typeof data.leaders; evaluations: typeof data.evaluations }> = {};
-    data.employees.forEach(e => {
-      if (!e.department) return;
-      if (!deptMap[e.department]) deptMap[e.department] = { employees: [], reviews: [], leaders: [], evaluations: [] };
-      deptMap[e.department].employees.push(e);
-    });
-    // Map reviews to departments
-    data.reviews.forEach(r => {
-      if (!r.department) return;
-      if (!deptMap[r.department]) deptMap[r.department] = { employees: [], reviews: [], leaders: [], evaluations: [] };
-      deptMap[r.department].reviews.push(r);
-    });
-    // Map evaluations by matching employee names to departments
-    const empDept = new Map(data.employees.map(e => [e.name, e.department]));
-    data.evaluations.forEach(ev => {
-      const dept = empDept.get(ev.employeeName);
-      if (dept && deptMap[dept]) deptMap[dept].evaluations.push(ev);
-    });
-    return Object.entries(deptMap)
-      .map(([name, d]) => ({ name, ...d }))
-      .sort((a, b) => b.employees.length - a.employees.length);
-  }, [data]);
-
-  // ── Leaders list ──
-  const leadersList = useMemo(() => {
-    const byLeader: Record<string, typeof data.leaders> = {};
-    data.leaders.forEach(l => {
-      if (!byLeader[l.leaderName]) byLeader[l.leaderName] = [];
-      byLeader[l.leaderName].push(l);
-    });
-    return Object.entries(byLeader)
-      .map(([name, evals]) => {
-        const avg = evals.reduce((s, e) => s + e.averageScore, 0) / evals.length;
-        return { name, evals, avg: Math.round(avg * 10) / 10, count: evals.length };
-      })
-      .sort((a, b) => b.avg - a.avg);
-  }, [data.leaders]);
-
-  // ── Selected department details ──
-  const deptDetail = useMemo(() => {
-    if (!selectedDept) return null;
-    const d = departments.find(x => x.name === selectedDept);
-    if (!d) return null;
-
-    const genderM = d.employees.filter(e => e.gender === 'ذكر').length;
-    const genderF = d.employees.filter(e => e.gender === 'أنثى').length;
-    const avgService = d.employees.length > 0 ? (d.employees.reduce((s, e) => s + e.serviceYears, 0) / d.employees.length).toFixed(1) : '0';
-    const leaders = d.employees.filter(e => e.isLeader).length;
-    const teams = [...new Set(d.employees.map(e => e.team).filter(Boolean))];
-    const tracks: Record<string, number> = {};
-    d.reviews.forEach(r => { if (r.generalTrack) tracks[r.generalTrack] = (tracks[r.generalTrack] || 0) + 1; });
-    const trackData = Object.entries(tracks).map(([name, value]) => ({ name, value, color: TRACK_COLORS[name] || '#94a3b8' }));
-    const confirmed = d.evaluations.filter(e => e.finalDecision === 'confirmed').length;
-    const terminated = d.evaluations.filter(e => e.finalDecision === 'terminated').length;
-
-    return { ...d, genderM, genderF, avgService, leaders, teams, trackData, confirmed, terminated };
-  }, [selectedDept, departments]);
-
-  // ── Selected leader details ──
-  const leaderDetail = useMemo(() => {
-    if (!selectedLeader) return null;
-    const l = leadersList.find(x => x.name === selectedLeader);
-    if (!l) return null;
-
-    const cats = [
-      { label: 'التواصل', fields: ['communication'] as const },
-      { label: 'الأولويات', fields: ['prioritization'] as const },
-      { label: 'اتخاذ القرار', fields: ['decisionMaking'] as const },
-      { label: 'بناء الأهداف', fields: ['goalSetting'] as const },
-      { label: 'التمكين', fields: ['empowerment'] as const },
-      { label: 'التفويض', fields: ['delegation'] as const },
-      { label: 'الدعم', fields: ['support'] as const },
-      { label: 'الذكاء العاطفي', fields: ['emotionalIntelligence'] as const },
-      { label: 'المعنويات', fields: ['morale'] as const },
-      { label: 'التعاون', fields: ['collaboration'] as const },
-      { label: 'البيئة', fields: ['environment'] as const },
-      { label: 'الإشراك', fields: ['inclusion'] as const },
-      { label: 'التطوير', fields: ['development'] as const },
-      { label: 'الملاحظات', fields: ['feedback'] as const },
-      { label: 'الأداء', fields: ['performance'] as const },
-      { label: 'الإبداع', fields: ['creativity'] as const },
-    ];
-
-    const scoreData = cats.map(cat => {
-      let t = 0, c = 0;
-      l.evals.forEach(ev => cat.fields.forEach(f => { const v = ev[f]; if (typeof v === 'number' && v > 0) { t += v; c++; } }));
-      return { name: cat.label, score: c > 0 ? Math.round((t / c) * 10) / 10 : 0 };
-    }).filter(d => d.score > 0);
-
-    const radarCats = [
-      { subject: 'الوضوح', fields: ['communication', 'prioritization', 'decisionMaking', 'goalSetting'] as const },
-      { subject: 'طريقة العمل', fields: ['empowerment', 'delegation', 'support', 'emotionalIntelligence'] as const },
-      { subject: 'قيادة الفريق', fields: ['morale', 'collaboration', 'environment', 'inclusion'] as const },
-      { subject: 'التطوير', fields: ['development', 'feedback', 'performance', 'creativity'] as const },
-    ];
-    const radarData = radarCats.map(cat => {
-      let t = 0, c = 0;
-      l.evals.forEach(ev => cat.fields.forEach(f => { const v = ev[f]; if (typeof v === 'number' && v > 0) { t += v; c++; } }));
-      return { subject: cat.subject, score: c > 0 ? Math.round((t / c) * 10) / 10 : 0, fullMark: 10 };
-    });
-
-    const comments = l.evals.map(e => e.generalComments).filter(Boolean);
-
-    return { ...l, scoreData, radarData, comments };
-  }, [selectedLeader, leadersList]);
-
-  // ── Overview data ──
-  const topPerformers = useMemo(() => {
-    const empScores: Record<string, { total: number; count: number }> = {};
-    data.reviews.forEach(r => {
-      const scores = Object.values(r.performanceScores).filter(s => s > 0);
-      if (scores.length === 0) return;
-      const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-      if (!empScores[r.employeeName]) empScores[r.employeeName] = { total: 0, count: 0 };
-      empScores[r.employeeName].total += avg;
-      empScores[r.employeeName].count++;
-    });
-    return Object.entries(empScores).map(([name, { total, count }]) => ({ name, avg: Math.round((total / count) * 10) / 10 })).sort((a, b) => b.avg - a.avg);
-  }, [data.reviews]);
-
-  const contractExpiring = useMemo(() => data.employees.filter(e => e.contractDaysRemaining > 0 && e.contractDaysRemaining <= 90), [data.employees]);
-
-  const deptPerfData = useMemo(() => {
-    const deptScores: Record<string, { total: number; count: number }> = {};
-    data.reviews.forEach(r => {
-      if (!r.department) return;
-      const scores = Object.values(r.performanceScores).filter(s => s > 0);
-      if (scores.length === 0) return;
-      const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-      if (!deptScores[r.department]) deptScores[r.department] = { total: 0, count: 0 };
-      deptScores[r.department].total += avg;
-      deptScores[r.department].count++;
-    });
-    return Object.entries(deptScores)
-      .map(([name, { total, count }]) => ({ name: name.length > 14 ? name.slice(0, 14) + '..' : name, score: Math.round((total / count) * 10) / 10 }))
-      .sort((a, b) => b.score - a.score).slice(0, 10);
-  }, [data.reviews]);
-
-  // ── Overall Averages ──
-  const averages = useMemo(() => {
-    // Average performance score across all reviews
-    let perfTotal = 0, perfCount = 0;
-    data.reviews.forEach(r => {
-      const scores = Object.values(r.performanceScores).filter(s => s > 0);
-      if (scores.length > 0) {
-        perfTotal += scores.reduce((a, b) => a + b, 0) / scores.length;
-        perfCount++;
-      }
-    });
-    const avgPerformance = perfCount > 0 ? Math.round((perfTotal / perfCount) * 10) / 10 : 0;
-
-    // Average leader evaluation score
-    const avgLeader = data.leaders.length > 0
-      ? Math.round((data.leaders.reduce((s, l) => s + l.averageScore, 0) / data.leaders.length) * 10) / 10
-      : 0;
-
-    // Average probation score (trafficLightScore)
-    const probEvals = data.evaluations.filter(e => e.trafficLightScore > 0);
-    const avgProbation = probEvals.length > 0
-      ? Math.round((probEvals.reduce((s, e) => s + e.trafficLightScore, 0) / probEvals.length) * 10) / 10
-      : 0;
-
-    // Department with highest/lowest averages
-    const deptScoresMap: Record<string, { total: number; count: number }> = {};
-    data.reviews.forEach(r => {
-      if (!r.department) return;
-      const scores = Object.values(r.performanceScores).filter(s => s > 0);
-      if (scores.length === 0) return;
-      const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-      if (!deptScoresMap[r.department]) deptScoresMap[r.department] = { total: 0, count: 0 };
-      deptScoresMap[r.department].total += avg;
-      deptScoresMap[r.department].count++;
-    });
-    const deptAvgs = Object.entries(deptScoresMap).map(([name, { total, count }]) => ({ name, avg: Math.round((total / count) * 10) / 10 }));
-    deptAvgs.sort((a, b) => b.avg - a.avg);
-    const highestDept = deptAvgs.length > 0 ? deptAvgs[0] : null;
-    const lowestDept = deptAvgs.length > 1 ? deptAvgs[deptAvgs.length - 1] : null;
-
-    return { avgPerformance, avgLeader, avgProbation, highestDept, lowestDept };
-  }, [data.reviews, data.leaders, data.evaluations]);
-
-  // ── Timeline Data ──
-  const timelineData = useMemo(() => {
-    const monthMap: Record<string, { month: string; reviews: number; perfTotal: number; perfCount: number; probations: number; leaderTotal: number; leaderCount: number }> = {};
-
-    const ensureMonth = (m: string) => {
-      if (!monthMap[m]) monthMap[m] = { month: m, reviews: 0, perfTotal: 0, perfCount: 0, probations: 0, leaderTotal: 0, leaderCount: 0 };
-    };
-
-    data.reviews.forEach(r => {
-      if (!r.reviewDate) return;
-      const m = r.reviewDate.slice(0, 7); // YYYY-MM
-      if (m.length !== 7) return;
-      ensureMonth(m);
-      monthMap[m].reviews++;
-      const scores = Object.values(r.performanceScores).filter(s => s > 0);
-      if (scores.length > 0) {
-        monthMap[m].perfTotal += scores.reduce((a, b) => a + b, 0) / scores.length;
-        monthMap[m].perfCount++;
-      }
-    });
-
-    data.evaluations.forEach(e => {
-      if (!e.submittedAt) return;
-      const m = e.submittedAt.slice(0, 7);
-      if (m.length !== 7) return;
-      ensureMonth(m);
-      monthMap[m].probations++;
-    });
-
-    data.leaders.forEach(l => {
-      if (!l.submittedAt) return;
-      const m = l.submittedAt.slice(0, 7);
-      if (m.length !== 7) return;
-      ensureMonth(m);
-      monthMap[m].leaderTotal += l.averageScore;
-      monthMap[m].leaderCount++;
-    });
-
-    return Object.values(monthMap)
-      .sort((a, b) => a.month.localeCompare(b.month))
-      .map(d => ({
-        month: d.month,
-        'تقييمات الأداء': d.reviews,
-        'تقييمات التجربة': d.probations,
-        'متوسط الأداء': d.perfCount > 0 ? Math.round((d.perfTotal / d.perfCount) * 10) / 10 : null,
-        'متوسط القيادة': d.leaderCount > 0 ? Math.round((d.leaderTotal / d.leaderCount) * 10) / 10 : null,
-      }));
-  }, [data.reviews, data.evaluations, data.leaders]);
-
-  // ── Trending (compare first half vs second half of timeline) ──
-  const trends = useMemo(() => {
-    if (timelineData.length < 2) return { perf: 0, leader: 0 };
-    const mid = Math.floor(timelineData.length / 2);
-    const firstHalf = timelineData.slice(0, mid);
-    const secondHalf = timelineData.slice(mid);
-
-    const avgOf = (arr: typeof timelineData, key: 'متوسط الأداء' | 'متوسط القيادة') => {
-      const vals = arr.map(d => d[key]).filter((v): v is number => v !== null && v > 0);
-      return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-    };
-
-    const perfFirst = avgOf(firstHalf, 'متوسط الأداء');
-    const perfSecond = avgOf(secondHalf, 'متوسط الأداء');
-    const leaderFirst = avgOf(firstHalf, 'متوسط القيادة');
-    const leaderSecond = avgOf(secondHalf, 'متوسط القيادة');
-
-    return {
-      perf: perfFirst > 0 ? Math.round((perfSecond - perfFirst) * 10) / 10 : 0,
-      leader: leaderFirst > 0 ? Math.round((leaderSecond - leaderFirst) * 10) / 10 : 0,
-    };
-  }, [timelineData]);
-
-  const hasAnyData = data.employees.length > 0 || data.reviews.length > 0 || data.evaluations.length > 0 || data.leaders.length > 0;
-
-  const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
-    { key: 'overview', label: 'نظرة عامة', icon: Target },
-    { key: 'timeline', label: 'الجدول الزمني', icon: Calendar },
-    { key: 'departments', label: 'حسب الإدارة', icon: Building2 },
-    { key: 'leaders', label: 'حسب القائد', icon: Shield },
-  ];
+  const health = useMemo(() => computeOrgHealth(data), [data]);
+  const risk = useMemo(() => computeTalentRisk(data), [data]);
+  const recommendations = useMemo(() => generateRecommendations(data), [data]);
+  const pipeline = useMemo(() => computeOnboardingPipeline(data), [data]);
+  const leadership = useMemo(() => computeLeadershipEffectiveness(data.employees, data.leaders, data.reviews), [data]);
+  const skills = useMemo(() => computeSkillGaps(data.reviews), [data]);
+  const calibration = useMemo(() => computeManagerCalibration(data.reviews, data.evaluations), [data]);
+  const composition = useMemo(() => computeWorkforceComposition(data.employees), [data]);
 
   return (
-    <div>
-      <TopBar title="الرؤى والتحليلات" />
-      <div className="p-8">
-        {!hasAnyData ? (
-          <div className="text-center py-20">
-            <Target className="w-16 h-16 mx-auto text-neutral-warm-gray mb-4" />
-            <p className="font-display font-black text-[20px]">لا توجد بيانات بعد</p>
+    <div className="min-h-screen bg-neutral-cream" dir="rtl">
+      <TopBar title="الرؤى الاستراتيجية" />
+
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+
+        {/* ── 1. Org Health Hero ── */}
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-80px' }}
+          className="bg-gradient-to-br from-brand-green/5 via-white to-brand-blue/5 rounded-2xl p-8 shadow-sm"
+        >
+          <SectionHeader icon={TrendingUp} title="صحة المنظمة" subtitle="مؤشر شامل لأداء المنظمة" color="#00C17A" />
+
+          <div className="flex flex-col items-center mb-8">
+            <RadialScore score={health.composite} maxScore={100} size={180} label="المؤشر الشامل" />
           </div>
-        ) : (
-          <>
-            {/* ── Tabs ── */}
-            <div className="flex gap-2 mb-8 bg-neutral-cream rounded-xl p-1.5">
-              {tabs.map(tab => (
-                <button
-                  key={tab.key}
-                  onClick={() => { setActiveTab(tab.key); setSelectedDept(null); setSelectedLeader(null); }}
-                  className={`flex items-center gap-2 px-5 py-3 rounded-lg font-ui font-black text-[14px] transition-all flex-1 justify-center ${
-                    activeTab === tab.key
-                      ? 'bg-white text-brand-black shadow-sm'
-                      : 'text-neutral-muted hover:text-brand-black'
-                  }`}
-                >
-                  <tab.icon className="w-4 h-4" />
-                  {tab.label}
-                </button>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            {[
+              { label: 'تقييم القادة', value: health.leaderScore, color: '#00C17A' },
+              { label: 'نجاح التجربة', value: health.probationRate, color: '#0072F9' },
+              { label: 'صحة الأداء', value: health.performanceHealth, color: '#FFBC0A' },
+              { label: 'معدل الاحتفاظ', value: health.retentionRate, color: '#82003A' },
+            ].map((m, i) => (
+              <div key={i} className="text-center p-4 bg-white rounded-xl shadow-sm">
+                <p className="font-display font-black text-[32px]" style={{ color: m.color }}>{Math.round(m.value)}%</p>
+                <p className="font-ui font-bold text-[12px] text-neutral-muted mt-1">{m.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {health.byDepartment.length > 0 && (
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={health.byDepartment} layout="vertical" margin={{ right: 80, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
+                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12 }} />
+                  <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="score" fill="#00C17A" radius={[0, 6, 6, 0]} name="الصحة" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          <InsightBox text={`المؤشر الشامل للمنظمة ${health.composite}/١٠٠ — ${health.composite >= 70 ? 'أداء جيد، استمروا بالتحسين' : health.composite >= 50 ? 'أداء متوسط يحتاج انتباه' : 'أداء ضعيف يتطلب تدخل عاجل'}`} />
+        </motion.section>
+
+        {/* ── 2. Talent Risk ── */}
+        {(risk.critical.length + risk.high.length + risk.medium.length > 0) && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            className="bg-white rounded-2xl p-6 shadow-sm"
+          >
+            <SectionHeader icon={AlertTriangle} title="مخاطر المواهب" subtitle="الموظفون المعرضون لخطر المغادرة أو الأداء المنخفض" color="#F24935" />
+
+            <div className="flex gap-4 mb-6">
+              {[
+                { label: 'حرج', count: risk.critical.length, color: '#F24935' },
+                { label: 'مرتفع', count: risk.high.length, color: '#FFBC0A' },
+                { label: 'متوسط', count: risk.medium.length, color: '#FFD97A' },
+              ].map((s, i) => (
+                <div key={i} className="flex items-center gap-2 px-4 py-2 rounded-lg" style={{ backgroundColor: `${s.color}15` }}>
+                  <span className="font-display font-black text-[24px]" style={{ color: s.color }}>{s.count}</span>
+                  <span className="font-ui font-bold text-[13px] text-neutral-muted">{s.label}</span>
+                </div>
               ))}
             </div>
 
-            {/* ══════ OVERVIEW TAB ══════ */}
-            <AnimatePresence mode="wait">
-              {activeTab === 'overview' && (
-                <motion.div key="overview" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
-                  {/* Key metrics row */}
-                  <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                    <Card delay={0}><Metric value={data.employees.length} label="إجمالي الموظفين" color="#0072F9" /></Card>
-                    <Card delay={0.05}><Metric value={data.reviews.length} label="تقييم أداء" color="#00C17A" /></Card>
-                    <Card delay={0.1}><Metric value={data.evaluations.length} label="تقييم تجربة" color="#FFBC0A" /></Card>
-                    <Card delay={0.15}><Metric value={data.leaders.length} label="تقييم قيادة" color="#82003A" /></Card>
-                    <Card delay={0.2}><Metric value={`${stats.avgServiceYears}y`} label="متوسط الخدمة" color="#84DBE5" /></Card>
-                  </div>
-
-                  {/* Averages row */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    {averages.avgPerformance > 0 && (
-                      <Card delay={0.22}>
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <BarChart3 className="w-4 h-4 text-brand-blue" />
-                            <p className="font-ui font-black text-[12px] text-neutral-muted">متوسط الأداء</p>
-                          </div>
-                          {trends.perf !== 0 && (
-                            <div className={`flex items-center gap-0.5 ${trends.perf > 0 ? 'text-brand-green' : 'text-brand-red'}`}>
-                              {trends.perf > 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                              <span className="font-ui font-black text-[11px]">{Math.abs(trends.perf)}</span>
-                            </div>
-                          )}
+            <div className="flex flex-wrap gap-2 mb-6">
+              {(() => {
+                const allRisk = [...risk.critical.map(r => ({ ...r, level: 'critical' as const })), ...risk.high.map(r => ({ ...r, level: 'high' as const })), ...risk.medium.map(r => ({ ...r, level: 'medium' as const }))];
+                const shown = allRisk.slice(0, 15);
+                const remaining = allRisk.length - shown.length;
+                return (
+                  <>
+                    {shown.map((r, i) => {
+                      const bg = r.level === 'critical' ? '#F2493520' : r.level === 'high' ? '#FFBC0A20' : '#FFD97A20';
+                      const textColor = r.level === 'critical' ? '#F24935' : r.level === 'high' ? '#FFBC0A' : '#B8860B';
+                      return (
+                        <div key={i} className="px-3 py-1.5 rounded-lg font-ui font-bold text-[12px]" style={{ backgroundColor: bg, color: textColor }}>
+                          {r.employee.preferredName || r.employee.name} ({r.score})
                         </div>
-                        <p className="font-display font-black text-[32px] leading-none text-brand-blue">{averages.avgPerformance}</p>
-                      </Card>
+                      );
+                    })}
+                    {remaining > 0 && (
+                      <div className="px-3 py-1.5 rounded-lg font-ui font-bold text-[12px] bg-neutral-cream text-neutral-muted">
+                        و{remaining} آخرين
+                      </div>
                     )}
-                    {averages.avgLeader > 0 && (
-                      <Card delay={0.24}>
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <Shield className="w-4 h-4 text-brand-burgundy" />
-                            <p className="font-ui font-black text-[12px] text-neutral-muted">متوسط تقييم القيادة</p>
-                          </div>
-                          {trends.leader !== 0 && (
-                            <div className={`flex items-center gap-0.5 ${trends.leader > 0 ? 'text-brand-green' : 'text-brand-red'}`}>
-                              {trends.leader > 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                              <span className="font-ui font-black text-[11px]">{Math.abs(trends.leader)}</span>
-                            </div>
-                          )}
-                        </div>
-                        <p className="font-display font-black text-[32px] leading-none text-brand-burgundy">{averages.avgLeader}</p>
-                      </Card>
-                    )}
-                    {averages.avgProbation > 0 && (
-                      <Card delay={0.26}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <Clock className="w-4 h-4 text-brand-amber" />
-                          <p className="font-ui font-black text-[12px] text-neutral-muted">متوسط درجة التجربة</p>
-                        </div>
-                        <p className="font-display font-black text-[32px] leading-none text-brand-amber">{averages.avgProbation}</p>
-                      </Card>
-                    )}
-                    {(averages.highestDept || averages.lowestDept) && (
-                      <Card delay={0.28}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Building2 className="w-4 h-4 text-brand-green" />
-                          <p className="font-ui font-black text-[12px] text-neutral-muted">أعلى / أدنى إدارة</p>
-                        </div>
-                        {averages.highestDept && (
-                          <div className="flex items-center gap-2 mb-1">
-                            <ArrowUpRight className="w-3 h-3 text-brand-green" />
-                            <span className="font-ui font-bold text-[12px] truncate flex-1">{averages.highestDept.name}</span>
-                            <span className="font-display font-black text-[16px] text-brand-green">{averages.highestDept.avg}</span>
-                          </div>
-                        )}
-                        {averages.lowestDept && (
-                          <div className="flex items-center gap-2">
-                            <ArrowDownRight className="w-3 h-3 text-brand-red" />
-                            <span className="font-ui font-bold text-[12px] truncate flex-1">{averages.lowestDept.name}</span>
-                            <span className="font-display font-black text-[16px] text-brand-red">{averages.lowestDept.avg}</span>
-                          </div>
-                        )}
-                      </Card>
-                    )}
-                  </div>
+                  </>
+                );
+              })()}
+            </div>
 
-                  {/* Alerts */}
-                  {contractExpiring.length > 0 && (
-                    <Card delay={0.25} className="border-2 border-brand-red/20">
-                      <div className="flex items-center gap-3 mb-3">
-                        <AlertTriangle className="w-5 h-5 text-brand-red" />
-                        <h3 className="font-ui font-black text-[15px] text-brand-red">{contractExpiring.length} عقد ينتهي خلال ٩٠ يوماً</h3>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {contractExpiring.slice(0, 10).map(e => (
-                          <span key={e.id} className="font-ui font-bold text-[12px] bg-brand-red/5 text-brand-red px-3 py-1.5 rounded-lg">
-                            {e.preferredName} — {e.contractDaysRemaining} يوم
-                          </span>
-                        ))}
-                        {contractExpiring.length > 10 && <span className="font-ui font-bold text-[12px] text-neutral-muted px-3 py-1.5">+{contractExpiring.length - 10} آخرين</span>}
-                      </div>
-                    </Card>
-                  )}
+            {risk.byDepartment.length > 0 && (
+              <div className="h-[250px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={risk.byDepartment} layout="vertical" margin={{ right: 80, left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
+                    <XAxis type="number" tick={{ fontSize: 12 }} />
+                    <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="critical" stackId="risk" fill="#F24935" name="حرج" />
+                    <Bar dataKey="high" stackId="risk" fill="#FFBC0A" name="مرتفع" />
+                    <Bar dataKey="medium" stackId="risk" fill="#FFD97A" name="متوسط" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Dept performance */}
-                    {deptPerfData.length > 0 && (
-                      <Card delay={0.3}>
-                        <div className="flex items-center gap-2 mb-4">
-                          <Building2 className="w-4 h-4 text-brand-blue" />
-                          <h3 className="font-ui font-black text-[15px]">أداء الإدارات</h3>
-                        </div>
-                        <ResponsiveContainer width="100%" height={280}>
-                          <BarChart data={deptPerfData} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
-                            <XAxis type="number" domain={[0, 5]} tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
-                            <YAxis dataKey="name" type="category" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} width={120} />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Bar dataKey="score" fill="#0072F9" radius={[0, 8, 8, 0]} barSize={18} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </Card>
-                    )}
-
-                    {/* Top/Bottom performers */}
-                    {topPerformers.length > 0 && (
-                      <Card delay={0.35}>
-                        <div className="grid grid-cols-2 gap-4 h-full">
-                          <div>
-                            <div className="flex items-center gap-2 mb-3">
-                              <TrendingUp className="w-4 h-4 text-brand-green" />
-                              <h3 className="font-ui font-black text-[14px]">أعلى ٥ أداءً</h3>
-                            </div>
-                            {topPerformers.slice(0, 5).map((p, i) => (
-                              <div key={p.name} className="flex items-center gap-2 py-2 border-b border-neutral-cream last:border-0">
-                                <span className="font-display font-black text-[16px] text-brand-green w-6">{i + 1}</span>
-                                <span className="font-ui font-bold text-[13px] flex-1 truncate">{p.name}</span>
-                                <span className="font-display font-black text-[14px] text-brand-green">{p.avg}</span>
-                              </div>
-                            ))}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2 mb-3">
-                              <ThumbsDown className="w-4 h-4 text-brand-red" />
-                              <h3 className="font-ui font-black text-[14px]">يحتاجون تطوير</h3>
-                            </div>
-                            {topPerformers.slice(-5).reverse().map((p, i) => (
-                              <div key={p.name} className="flex items-center gap-2 py-2 border-b border-neutral-cream last:border-0">
-                                <span className="font-display font-black text-[16px] text-brand-red w-6">{i + 1}</span>
-                                <span className="font-ui font-bold text-[13px] flex-1 truncate">{p.name}</span>
-                                <span className="font-display font-black text-[14px] text-brand-red">{p.avg}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </Card>
-                    )}
-                  </div>
-
-                  {/* World map */}
-                  {(Object.keys(stats.locationDistribution).length > 0) && (
-                    <Card delay={0.4}>
-                      <div className="flex items-center gap-2 mb-4">
-                        <MapPin className="w-4 h-4 text-brand-green" />
-                        <h3 className="font-ui font-black text-[15px]">التوزيع الجغرافي</h3>
-                      </div>
-                      <WorldMap locationData={stats.locationDistribution} nationalityData={stats.nationalityDistribution} />
-                    </Card>
-                  )}
-
-                  {/* Leader rankings */}
-                  {leadersList.length > 0 && (
-                    <Card delay={0.45}>
-                      <div className="flex items-center gap-2 mb-4">
-                        <Shield className="w-4 h-4 text-brand-burgundy" />
-                        <h3 className="font-ui font-black text-[15px]">ترتيب القادة</h3>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {leadersList.map((ldr, i) => (
-                          <motion.div key={ldr.name} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 + i * 0.03 }}
-                            className="flex items-center gap-3 bg-neutral-cream rounded-xl p-3 cursor-pointer hover:bg-neutral-warm-gray transition-colors"
-                            onClick={() => { setActiveTab('leaders'); setSelectedLeader(ldr.name); }}
-                          >
-                            <span className="font-display font-black text-[18px] w-7 text-neutral-muted">{i + 1}</span>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-ui font-black text-[13px] truncate">{ldr.name}</p>
-                              <p className="font-ui font-bold text-[11px] text-neutral-muted">{ldr.count} تقييم</p>
-                            </div>
-                            <span className="font-display font-black text-[20px]" style={{ color: ldr.avg >= 7 ? '#00C17A' : ldr.avg >= 5 ? '#FFBC0A' : '#F24935' }}>{ldr.avg}</span>
-                          </motion.div>
-                        ))}
-                      </div>
-                    </Card>
-                  )}
-
-                  {/* Company structure */}
-                  <Card delay={0.5}>
-                    <h3 className="font-ui font-black text-[15px] mb-4">هيكل الشركة</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="text-center p-3 bg-brand-blue/5 rounded-xl">
-                        <p className="font-display font-black text-[28px] text-brand-blue">{stats.departmentCount}</p>
-                        <p className="font-ui font-bold text-[12px] text-neutral-muted">إدارة</p>
-                      </div>
-                      <div className="text-center p-3 bg-brand-green/5 rounded-xl">
-                        <p className="font-display font-black text-[28px] text-brand-green">{stats.teamCount}</p>
-                        <p className="font-ui font-bold text-[12px] text-neutral-muted">فريق</p>
-                      </div>
-                      <div className="text-center p-3 bg-brand-amber/5 rounded-xl">
-                        <p className="font-display font-black text-[28px] text-brand-amber">{stats.leaders}</p>
-                        <p className="font-ui font-bold text-[12px] text-neutral-muted">قائد</p>
-                      </div>
-                      <div className="text-center p-3 bg-brand-burgundy/5 rounded-xl">
-                        <p className="font-display font-black text-[28px] text-brand-burgundy">{stats.inProbation}</p>
-                        <p className="font-ui font-bold text-[12px] text-neutral-muted">في فترة تجربة</p>
-                      </div>
-                    </div>
-                  </Card>
-                </motion.div>
-              )}
-
-              {/* ══════ TIMELINE TAB ══════ */}
-              {activeTab === 'timeline' && (
-                <motion.div key="timeline" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
-                  {timelineData.length === 0 ? (
-                    <Card>
-                      <div className="text-center py-12">
-                        <Calendar className="w-12 h-12 mx-auto text-neutral-warm-gray mb-3" />
-                        <p className="font-ui font-black text-[16px] text-neutral-muted">لا توجد بيانات زمنية كافية</p>
-                      </div>
-                    </Card>
-                  ) : (
-                    <>
-                      {/* Summary averages for timeline */}
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Card delay={0}>
-                          <p className="font-ui font-black text-[12px] text-neutral-muted mb-1">إجمالي الأشهر</p>
-                          <p className="font-display font-black text-[28px] leading-none text-brand-blue">{timelineData.length}</p>
-                        </Card>
-                        <Card delay={0.05}>
-                          <p className="font-ui font-black text-[12px] text-neutral-muted mb-1">متوسط التقييمات/شهر</p>
-                          <p className="font-display font-black text-[28px] leading-none text-brand-green">
-                            {Math.round(timelineData.reduce((s, d) => s + d['تقييمات الأداء'], 0) / timelineData.length * 10) / 10}
-                          </p>
-                        </Card>
-                        <Card delay={0.1}>
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="font-ui font-black text-[12px] text-neutral-muted">اتجاه الأداء</p>
-                            {trends.perf !== 0 && (
-                              trends.perf > 0
-                                ? <ArrowUpRight className="w-4 h-4 text-brand-green" />
-                                : <ArrowDownRight className="w-4 h-4 text-brand-red" />
-                            )}
-                          </div>
-                          <p className={`font-display font-black text-[28px] leading-none ${trends.perf >= 0 ? 'text-brand-green' : 'text-brand-red'}`}>
-                            {trends.perf > 0 ? '+' : ''}{trends.perf}
-                          </p>
-                        </Card>
-                        <Card delay={0.15}>
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="font-ui font-black text-[12px] text-neutral-muted">اتجاه القيادة</p>
-                            {trends.leader !== 0 && (
-                              trends.leader > 0
-                                ? <ArrowUpRight className="w-4 h-4 text-brand-green" />
-                                : <ArrowDownRight className="w-4 h-4 text-brand-red" />
-                            )}
-                          </div>
-                          <p className={`font-display font-black text-[28px] leading-none ${trends.leader >= 0 ? 'text-brand-green' : 'text-brand-red'}`}>
-                            {trends.leader > 0 ? '+' : ''}{trends.leader}
-                          </p>
-                        </Card>
-                      </div>
-
-                      {/* Review counts over time (Area chart) */}
-                      <Card delay={0.2}>
-                        <div className="flex items-center gap-2 mb-4">
-                          <TrendingUp className="w-4 h-4 text-brand-blue" />
-                          <h3 className="font-ui font-black text-[15px]">عدد التقييمات عبر الزمن</h3>
-                        </div>
-                        <ResponsiveContainer width="100%" height={300}>
-                          <AreaChart data={timelineData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                            <defs>
-                              <linearGradient id="colorReviews" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#0072F9" stopOpacity={0.3} />
-                                <stop offset="95%" stopColor="#0072F9" stopOpacity={0} />
-                              </linearGradient>
-                              <linearGradient id="colorProbation" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#FFBC0A" stopOpacity={0.3} />
-                                <stop offset="95%" stopColor="#FFBC0A" stopOpacity={0} />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
-                            <XAxis dataKey="month" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
-                            <YAxis tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Legend wrapperStyle={{ fontFamily: 'Thmanyah Sans', fontSize: 12, fontWeight: 700 }} />
-                            <Area type="monotone" dataKey="تقييمات الأداء" stroke="#0072F9" fill="url(#colorReviews)" strokeWidth={2} />
-                            <Area type="monotone" dataKey="تقييمات التجربة" stroke="#FFBC0A" fill="url(#colorProbation)" strokeWidth={2} />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      </Card>
-
-                      {/* Average scores over time (Line chart) */}
-                      <Card delay={0.3}>
-                        <div className="flex items-center gap-2 mb-4">
-                          <Star className="w-4 h-4 text-brand-green" />
-                          <h3 className="font-ui font-black text-[15px]">متوسط الدرجات عبر الزمن</h3>
-                        </div>
-                        <ResponsiveContainer width="100%" height={300}>
-                          <LineChart data={timelineData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
-                            <XAxis dataKey="month" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
-                            <YAxis domain={[0, 'auto']} tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Legend wrapperStyle={{ fontFamily: 'Thmanyah Sans', fontSize: 12, fontWeight: 700 }} />
-                            <Line type="monotone" dataKey="متوسط الأداء" stroke="#00C17A" strokeWidth={3} dot={{ fill: '#00C17A', r: 4 }} connectNulls />
-                            <Line type="monotone" dataKey="متوسط القيادة" stroke="#82003A" strokeWidth={3} dot={{ fill: '#82003A', r: 4 }} connectNulls />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </Card>
-                    </>
-                  )}
-                </motion.div>
-              )}
-
-              {/* ══════ DEPARTMENTS TAB ══════ */}
-              {activeTab === 'departments' && (
-                <motion.div key="departments" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                  {!selectedDept ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {departments.map((dept, i) => (
-                        <motion.button
-                          key={dept.name}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: i * 0.03 }}
-                          onClick={() => setSelectedDept(dept.name)}
-                          className="bg-white rounded-2xl p-5 shadow-sm text-right hover:shadow-md transition-all border-2 border-transparent hover:border-brand-green/30"
-                        >
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className="w-10 h-10 rounded-xl bg-brand-blue/10 flex items-center justify-center">
-                              <Building2 className="w-5 h-5 text-brand-blue" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h3 className="font-ui font-black text-[15px] truncate">{dept.name}</h3>
-                            </div>
-                            <ChevronDown className="w-4 h-4 text-neutral-muted -rotate-90" />
-                          </div>
-                          <div className="flex flex-wrap gap-3">
-                            <span className="font-ui font-bold text-[12px] text-brand-blue bg-brand-blue/5 px-2 py-1 rounded">{dept.employees.length} موظف</span>
-                            {dept.reviews.length > 0 && <span className="font-ui font-bold text-[12px] text-brand-green bg-brand-green/5 px-2 py-1 rounded">{dept.reviews.length} تقييم أداء</span>}
-                            {dept.evaluations.length > 0 && <span className="font-ui font-bold text-[12px] text-brand-amber bg-brand-amber/5 px-2 py-1 rounded">{dept.evaluations.length} تجربة</span>}
-                          </div>
-                        </motion.button>
-                      ))}
-                    </div>
-                  ) : deptDetail && (
-                    <div className="space-y-6">
-                      <button onClick={() => setSelectedDept(null)} className="font-ui font-black text-[14px] text-brand-blue hover:underline">
-                        ← العودة لجميع الإدارات
-                      </button>
-
-                      <Card delay={0}>
-                        <h2 className="font-display font-black text-[24px] mb-4">{deptDetail.name}</h2>
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                          <Metric value={deptDetail.employees.length} label="موظف" color="#0072F9" />
-                          <Metric value={deptDetail.leaders} label="قائد" color="#FFBC0A" />
-                          <Metric value={deptDetail.avgService} label="متوسط الخدمة" color="#00C17A" />
-                          <Metric value={deptDetail.teams.length} label="فريق" color="#84DBE5" />
-                          <Metric value={`${deptDetail.genderM}/${deptDetail.genderF}`} label="ذكور/إناث" color="#0072F9" />
-                          <Metric value={deptDetail.reviews.length} label="تقييم أداء" color="#00C17A" />
-                        </div>
-                      </Card>
-
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Track distribution */}
-                        {deptDetail.trackData.length > 0 && (
-                          <Card delay={0.1}>
-                            <h3 className="font-ui font-black text-[15px] mb-4">توزيع الدروب</h3>
-                            <div className="flex items-center">
-                              <ResponsiveContainer width="55%" height={200}>
-                                <PieChart>
-                                  <Pie data={deptDetail.trackData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="value" paddingAngle={3}>
-                                    {deptDetail.trackData.map((e, i) => <Cell key={i} fill={e.color} />)}
-                                  </Pie>
-                                  <Tooltip contentStyle={{ fontFamily: 'Thmanyah Sans', fontSize: 13, fontWeight: 700, borderRadius: 8, border: 'none' }} />
-                                </PieChart>
-                              </ResponsiveContainer>
-                              <div className="flex-1 space-y-2">
-                                {deptDetail.trackData.map(t => (
-                                  <div key={t.name} className="flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: t.color }} />
-                                    <span className="font-ui font-black text-[13px]">{t.name}</span>
-                                    <span className="font-ui font-bold text-[13px] text-neutral-muted mr-auto">{t.value}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </Card>
-                        )}
-
-                        {/* Probation */}
-                        {(deptDetail.confirmed > 0 || deptDetail.terminated > 0) && (
-                          <Card delay={0.15}>
-                            <h3 className="font-ui font-black text-[15px] mb-4">فترات التجربة</h3>
-                            <div className="grid grid-cols-3 gap-4">
-                              <Metric value={deptDetail.confirmed} label="ترسيم" color="#00C17A" />
-                              <Metric value={deptDetail.terminated} label="لم يستمر" color="#F24935" />
-                              <Metric value={deptDetail.confirmed + deptDetail.terminated > 0 ? `${Math.round((deptDetail.confirmed / (deptDetail.confirmed + deptDetail.terminated)) * 100)}%` : '-'} label="معدل النجاح" color="#0072F9" />
-                            </div>
-                          </Card>
-                        )}
-                      </div>
-
-                      {/* Teams */}
-                      {deptDetail.teams.length > 0 && (
-                        <Card delay={0.2}>
-                          <h3 className="font-ui font-black text-[15px] mb-3">الفرق</h3>
-                          <div className="flex flex-wrap gap-2">
-                            {deptDetail.teams.map(t => (
-                              <span key={t} className="font-ui font-bold text-[13px] bg-neutral-cream px-4 py-2 rounded-xl">{t}</span>
-                            ))}
-                          </div>
-                        </Card>
-                      )}
-                    </div>
-                  )}
-                </motion.div>
-              )}
-
-              {/* ══════ LEADERS TAB ══════ */}
-              {activeTab === 'leaders' && (
-                <motion.div key="leaders" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                  {!selectedLeader ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {leadersList.map((ldr, i) => (
-                        <motion.button
-                          key={ldr.name}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: i * 0.03 }}
-                          onClick={() => setSelectedLeader(ldr.name)}
-                          className="bg-white rounded-2xl p-5 shadow-sm text-right hover:shadow-md transition-all border-2 border-transparent hover:border-brand-burgundy/30"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: ldr.avg >= 7 ? '#00C17A15' : ldr.avg >= 5 ? '#FFBC0A15' : '#F2493515' }}>
-                              <span className="font-display font-black text-[20px]" style={{ color: ldr.avg >= 7 ? '#00C17A' : ldr.avg >= 5 ? '#FFBC0A' : '#F24935' }}>{ldr.avg}</span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h3 className="font-ui font-black text-[15px] truncate">{ldr.name}</h3>
-                              <p className="font-ui font-bold text-[12px] text-neutral-muted">{ldr.count} تقييم</p>
-                            </div>
-                            <ChevronDown className="w-4 h-4 text-neutral-muted -rotate-90" />
-                          </div>
-                        </motion.button>
-                      ))}
-                    </div>
-                  ) : leaderDetail && (
-                    <div className="space-y-6">
-                      <button onClick={() => setSelectedLeader(null)} className="font-ui font-black text-[14px] text-brand-blue hover:underline">
-                        ← العودة لجميع القادة
-                      </button>
-
-                      <Card delay={0}>
-                        <div className="flex items-center gap-4">
-                          <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: leaderDetail.avg >= 7 ? '#00C17A15' : leaderDetail.avg >= 5 ? '#FFBC0A15' : '#F2493515' }}>
-                            <span className="font-display font-black text-[28px]" style={{ color: leaderDetail.avg >= 7 ? '#00C17A' : leaderDetail.avg >= 5 ? '#FFBC0A' : '#F24935' }}>{leaderDetail.avg}</span>
-                          </div>
-                          <div>
-                            <h2 className="font-display font-black text-[24px]">{leaderDetail.name}</h2>
-                            <p className="font-ui font-bold text-[14px] text-neutral-muted">{leaderDetail.count} تقييم من الفريق</p>
-                          </div>
-                        </div>
-                      </Card>
-
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Radar */}
-                        <Card delay={0.1}>
-                          <h3 className="font-ui font-black text-[15px] mb-4">المحاور الأربعة</h3>
-                          <ResponsiveContainer width="100%" height={280}>
-                            <RadarChart cx="50%" cy="50%" outerRadius="65%" data={leaderDetail.radarData}>
-                              <PolarGrid stroke="#EFEDE2" />
-                              <PolarAngleAxis dataKey="subject" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 12, fontWeight: 900, fill: '#2B2D3F' }} />
-                              <PolarRadiusAxis angle={30} domain={[0, 10]} tick={{ fontSize: 10 }} />
-                              <Radar dataKey="score" stroke="#82003A" fill="#82003A" fillOpacity={0.25} strokeWidth={2} />
-                            </RadarChart>
-                          </ResponsiveContainer>
-                        </Card>
-
-                        {/* Score breakdown */}
-                        <Card delay={0.15}>
-                          <h3 className="font-ui font-black text-[15px] mb-4">تفصيل الدرجات</h3>
-                          <ResponsiveContainer width="100%" height={320}>
-                            <BarChart data={leaderDetail.scoreData} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
-                              <XAxis type="number" domain={[0, 10]} tick={{ fontFamily: 'Thmanyah Sans', fontSize: 11, fontWeight: 700 }} />
-                              <YAxis dataKey="name" type="category" tick={{ fontFamily: 'Thmanyah Sans', fontSize: 10, fontWeight: 700 }} width={90} />
-                              <Tooltip content={<CustomTooltip />} />
-                              <Bar dataKey="score" fill="#82003A" radius={[0, 6, 6, 0]} barSize={14} />
-                            </BarChart>
-                          </ResponsiveContainer>
-                        </Card>
-                      </div>
-
-                      {/* Comments */}
-                      {leaderDetail.comments.length > 0 && (
-                        <Card delay={0.2}>
-                          <h3 className="font-ui font-black text-[15px] mb-4">ملاحظات الفريق</h3>
-                          <div className="space-y-3">
-                            {leaderDetail.comments.map((c, i) => (
-                              <motion.div key={i} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 + i * 0.05 }}
-                                className="bg-neutral-cream rounded-xl p-4">
-                                <p className="font-body font-bold text-[14px] leading-relaxed whitespace-pre-wrap">{c}</p>
-                              </motion.div>
-                            ))}
-                          </div>
-                        </Card>
-                      )}
-                    </div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </>
+            <InsightBox text={`${risk.critical.length} موظف في خطر حرج — ركزوا على العقود المنتهية والموظفين غير المُتمسَّك بهم`} />
+          </motion.section>
         )}
+
+        {/* ── 3. Strategic Recommendations ── */}
+        {recommendations.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            className="bg-white rounded-2xl p-6 shadow-sm"
+          >
+            <SectionHeader icon={Target} title="التوصيات الاستراتيجية" subtitle="إجراءات مقترحة بناءً على البيانات" color="#0072F9" />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {recommendations.map((rec, i) => {
+                const borderColor = rec.severity === 'critical' ? '#F24935' : rec.severity === 'warning' ? '#FFBC0A' : '#0072F9';
+                const RecIcon = rec.severity === 'critical' ? AlertTriangle : rec.severity === 'warning' ? TrendingUp : BarChart3;
+                return (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -10 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.05 }}
+                    className="p-4 rounded-xl bg-neutral-cream/50"
+                    style={{ borderRight: `4px solid ${borderColor}` }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <RecIcon className="w-5 h-5 mt-0.5 shrink-0" style={{ color: borderColor }} />
+                      <div>
+                        <p className="font-ui font-black text-[14px] text-brand-black">{rec.title}</p>
+                        <p className="font-ui font-bold text-[12px] text-neutral-muted mt-1">{rec.description}</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+
+            <InsightBox text={`${recommendations.filter(r => r.severity === 'critical').length} توصية حرجة و${recommendations.filter(r => r.severity === 'warning').length} تحذير يحتاج متابعة`} />
+          </motion.section>
+        )}
+
+        {/* ── 4. Onboarding Pipeline ── */}
+        {pipeline.funnel.some(f => f.count > 0) && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            className="bg-white rounded-2xl p-6 shadow-sm"
+          >
+            <SectionHeader icon={Activity} title="مسار التأهيل" subtitle="من التعيين إلى الترسيم" color="#00C17A" />
+
+            <div className="flex flex-col items-center gap-2 mb-8">
+              {pipeline.funnel.map((stage, i) => {
+                const widths = [100, 85, 70, 55, 40];
+                const colors = ['#0072F9', '#00C17A', '#FFBC0A', '#00C17A', '#F24935'];
+                return (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, scaleX: 0 }}
+                    whileInView={{ opacity: 1, scaleX: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.1 }}
+                    className="rounded-lg py-3 px-4 flex items-center justify-between font-ui font-bold text-[13px] text-white"
+                    style={{ width: `${widths[i]}%`, backgroundColor: colors[i] }}
+                  >
+                    <span>{stage.stage}</span>
+                    <span className="font-display font-black">{stage.count}</span>
+                  </motion.div>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {pipeline.byDepartment.length > 0 && (
+                <div>
+                  <h3 className="font-ui font-black text-[14px] mb-3">نسبة النجاح بالإدارات</h3>
+                  <div className="h-[250px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={pipeline.byDepartment} layout="vertical" margin={{ right: 60, left: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
+                        <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12 }} />
+                        <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 11 }} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Bar dataKey="rate" fill="#00C17A" radius={[0, 6, 6, 0]} name="نسبة النجاح %" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {pipeline.byEvaluator.length > 0 && (
+                <div>
+                  <h3 className="font-ui font-black text-[14px] mb-3">أداء المقيّمين</h3>
+                  <div className="space-y-2">
+                    {pipeline.byEvaluator.slice(0, 10).map((ev, i) => (
+                      <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-neutral-cream/50">
+                        <span className="font-ui font-bold text-[13px]">{ev.name}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="font-ui font-bold text-[12px] text-neutral-muted">{ev.total} تقييم</span>
+                          <span className="font-display font-black text-[14px] text-brand-green">{Math.round(ev.rate)}%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <InsightBox text={`${pipeline.funnel[3]?.count || 0} موظف تم ترسيمهم من أصل ${pipeline.funnel[0]?.count || 0} — معدل تحويل ${pipeline.funnel[0]?.count ? Math.round(((pipeline.funnel[3]?.count || 0) / pipeline.funnel[0].count) * 100) : 0}%`} />
+          </motion.section>
+        )}
+
+        {/* ── 5. Leadership Effectiveness ── */}
+        {leadership.ranking.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            className="bg-white rounded-2xl p-6 shadow-sm"
+          >
+            <SectionHeader icon={Shield} title="فعالية القيادة" subtitle="تصنيف القادة ومجالات التطوير" color="#82003A" />
+
+            <div className="mb-6">
+              <h3 className="font-ui font-black text-[14px] mb-3">ترتيب القادة (أعلى ١٠)</h3>
+              <div className="space-y-2">
+                {leadership.ranking.slice(0, 10).map((leader, i) => {
+                  const maxScore = Math.max(...leadership.ranking.map(l => l.score360), 10);
+                  const barWidth = maxScore > 0 ? (leader.score360 / maxScore) * 100 : 0;
+                  return (
+                    <div key={i} className="flex items-center gap-3">
+                      <span className="font-ui font-bold text-[13px] w-28 shrink-0 truncate">{leader.name}</span>
+                      <div className="flex-1 h-7 bg-neutral-cream rounded-full overflow-hidden relative">
+                        <motion.div
+                          className="h-full rounded-full"
+                          style={{ backgroundColor: '#82003A' }}
+                          initial={{ width: 0 }}
+                          whileInView={{ width: `${barWidth}%` }}
+                          viewport={{ once: true }}
+                          transition={{ delay: i * 0.05, duration: 0.6 }}
+                        />
+                        <span className="absolute inset-y-0 flex items-center px-3 font-display font-black text-[12px] text-white">
+                          {leader.score360.toFixed(1)}
+                        </span>
+                      </div>
+                      <span className="font-ui font-bold text-[11px] text-neutral-muted shrink-0">فريق: {leader.teamSize}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {leadership.topVsBottom.length > 0 && (
+                <div>
+                  <h3 className="font-ui font-black text-[14px] mb-3">مقارنة الأعلى والأدنى</h3>
+                  <div className="h-[350px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart data={leadership.topVsBottom}>
+                        <PolarGrid stroke="#EFEDE2" />
+                        <PolarAngleAxis dataKey="category" tick={{ fontSize: 10 }} />
+                        <PolarRadiusAxis domain={[0, 10]} tick={{ fontSize: 10 }} />
+                        <Radar name="الأعلى" dataKey="topScore" stroke="#00C17A" fill="#00C17A" fillOpacity={0.3} />
+                        <Radar name="الأدنى" dataKey="bottomScore" stroke="#F24935" fill="#F24935" fillOpacity={0.3} />
+                        <Tooltip content={<CustomTooltip />} />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {leadership.coachingNeeded.length > 0 && (
+                <div>
+                  <h3 className="font-ui font-black text-[14px] mb-3">يحتاجون تطوير</h3>
+                  <div className="space-y-3">
+                    {leadership.coachingNeeded.slice(0, 6).map((c, i) => (
+                      <div key={i} className="p-3 rounded-xl bg-neutral-cream/50 border-r-4 border-brand-amber">
+                        <p className="font-ui font-black text-[13px] text-brand-black">{c.name}</p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {c.weakAreas.map((area, j) => (
+                            <span key={j} className="px-2 py-0.5 rounded-md bg-brand-amber/10 font-ui font-bold text-[11px] text-brand-amber">
+                              {area}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <InsightBox text={`أفضل قائد: ${leadership.ranking[0]?.name || '-'} بدرجة ${leadership.ranking[0]?.score360.toFixed(1) || '0'}/١٠ — ${leadership.coachingNeeded.length} قائد يحتاج خطة تطوير`} />
+          </motion.section>
+        )}
+
+        {/* ── 6. Skill Gap Analysis ── */}
+        {skills.orgRadar.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            className="bg-white rounded-2xl p-6 shadow-sm"
+          >
+            <SectionHeader icon={Star} title="تحليل فجوات المهارات" subtitle="المعايير الثمانية للأداء" color="#FFBC0A" />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="h-[350px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart data={skills.orgRadar}>
+                    <PolarGrid stroke="#EFEDE2" />
+                    <PolarAngleAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <PolarRadiusAxis domain={[0, 5]} tick={{ fontSize: 10 }} />
+                    <Radar name="المتوسط" dataKey="score" stroke="#FFBC0A" fill="#FFBC0A" fillOpacity={0.3} />
+                    <Tooltip content={<CustomTooltip />} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div>
+                <h3 className="font-ui font-black text-[14px] mb-3">أضعف ٣ معايير</h3>
+                <div className="space-y-3">
+                  {skills.bottom3.map((item, i) => (
+                    <div key={i} className="p-4 rounded-xl bg-neutral-cream/50 border-r-4 border-brand-red">
+                      <div className="flex items-center justify-between">
+                        <span className="font-ui font-black text-[14px]">{item.label}</span>
+                        <span className="font-display font-black text-[20px] text-brand-red">{item.score.toFixed(1)}</span>
+                      </div>
+                      <div className="w-full bg-neutral-cream rounded-full h-2 mt-2">
+                        <div className="h-2 rounded-full bg-brand-red" style={{ width: `${(item.score / 5) * 100}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {skills.heatmap.length > 0 && (
+              <div className="overflow-x-auto">
+                <h3 className="font-ui font-black text-[14px] mb-3">خريطة حرارية بالإدارات</h3>
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="p-2 font-ui font-black text-[12px] text-right">الإدارة</th>
+                      {skills.orgRadar.map((c, i) => (
+                        <th key={i} className="p-2 font-ui font-bold text-[10px] text-center">{c.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {skills.heatmap.map((row, i) => (
+                      <tr key={i}>
+                        <td className="p-2 font-ui font-bold text-[12px]">{row.department}</td>
+                        {skills.orgRadar.map((c, j) => {
+                          const val = row.scores[c.criterion] || 0;
+                          return (
+                            <td key={j} className="p-1 text-center">
+                              <div
+                                className="rounded-md py-1 font-display font-black text-[12px] text-white"
+                                style={{ backgroundColor: getHeatmapColor(val) }}
+                              >
+                                {val > 0 ? val.toFixed(1) : '-'}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <InsightBox text={`أضعف معيار: ${skills.bottom3[0]?.label || '-'} بمتوسط ${skills.bottom3[0]?.score.toFixed(1) || '0'}/٥ — فرصة تدريب مباشرة`} />
+          </motion.section>
+        )}
+
+        {/* ── 7. Manager Calibration ── */}
+        {calibration.perfCalibration.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            className="bg-white rounded-2xl p-6 shadow-sm"
+          >
+            <SectionHeader icon={UserCheck} title="معايرة المديرين" subtitle="مقارنة تقييمات المديرين بالمتوسط العام" color="#0072F9" />
+
+            <div className="h-[400px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={calibration.perfCalibration.slice(0, 15).map(m => ({
+                    ...m,
+                    fill: getCalibrationColor(m.deviation),
+                  }))}
+                  layout="vertical"
+                  margin={{ right: 80, left: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
+                  <XAxis type="number" domain={[0, 5]} tick={{ fontSize: 12 }} />
+                  <YAxis dataKey="manager" type="category" width={100} tick={{ fontSize: 11 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <ReferenceLine x={calibration.orgAvgPerf} stroke="#2B2D3F" strokeDasharray="3 3" label={{ value: `المتوسط ${calibration.orgAvgPerf.toFixed(1)}`, fontSize: 11, position: 'top' }} />
+                  {calibration.perfCalibration.slice(0, 15).map((entry, index) => (
+                    <Bar
+                      key={index}
+                      dataKey="avgGiven"
+                      name="المتوسط المُعطى"
+                      radius={[0, 6, 6, 0]}
+                      fill={getCalibrationColor(entry.deviation)}
+                      isAnimationActive={false}
+                    />
+                  )).slice(0, 1)}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <InsightBox text={`${calibration.perfCalibration.filter(m => Math.abs(m.deviation) > 1).length} مدير انحرافه أكثر من ١ نقطة عن المتوسط — مراجعة المعايرة مطلوبة`} />
+          </motion.section>
+        )}
+
+        {/* ── 8. Workforce Composition ── */}
+        {data.employees.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            className="bg-white rounded-2xl p-6 shadow-sm"
+          >
+            <SectionHeader icon={Layers} title="تركيبة القوى العاملة" subtitle="توزيع الموظفين حسب الخبرة والعمر ونوع العمل" color="#14B8A6" />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Tenure */}
+              <div>
+                <h3 className="font-ui font-black text-[14px] mb-3">سنوات الخدمة</h3>
+                <div className="h-[220px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={composition.tenureBuckets}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
+                      <XAxis dataKey="bucket" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="count" fill="#14B8A6" radius={[6, 6, 0, 0]} name="العدد" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Age */}
+              <div>
+                <h3 className="font-ui font-black text-[14px] mb-3">الفئات العمرية</h3>
+                <div className="h-[220px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={composition.ageBuckets}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
+                      <XAxis dataKey="bucket" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="count" fill="#0072F9" radius={[6, 6, 0, 0]} name="العدد" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Leadership density */}
+              <div>
+                <h3 className="font-ui font-black text-[14px] mb-3">كثافة القيادة</h3>
+                <div className="h-[220px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={composition.leadershipDensity} layout="vertical" margin={{ right: 60, left: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#EFEDE2" />
+                      <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12 }} />
+                      <YAxis dataKey="dept" type="category" width={80} tick={{ fontSize: 11 }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="density" fill="#82003A" radius={[0, 6, 6, 0]} name="النسبة %" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Work types */}
+              <div>
+                <h3 className="font-ui font-black text-[14px] mb-3">نوع العمل</h3>
+                <div className="h-[220px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={composition.workTypes}
+                        dataKey="count"
+                        nameKey="type"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        label={({ name, value }: { name?: string; value?: number }) => `${name || ''}: ${value || 0}`}
+                      >
+                        {composition.workTypes.map((_, i) => (
+                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            <InsightBox text={`${data.employees.length} موظف — أكبر شريحة عمرية: ${composition.ageBuckets.reduce((a, b) => a.count > b.count ? a : b, { bucket: '-', count: 0 }).bucket} سنة`} />
+          </motion.section>
+        )}
+
       </div>
     </div>
   );
