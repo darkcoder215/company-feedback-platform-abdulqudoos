@@ -198,6 +198,9 @@ export interface ParseResult {
   evaluations?: Evaluation[];
   reviews?: PerformanceReview[];
   leaders?: LeaderEvaluation[];
+  stationMeetings?: StationMeeting[];
+  retentionFlags?: RetentionFlag[];
+  leaderAnalyses?: LeaderAnalysis[];
   error?: string;
 }
 
@@ -220,6 +223,58 @@ export interface PlatformData {
   evaluations: Evaluation[];
   reviews: PerformanceReview[];
   leaders: LeaderEvaluation[];
+  stationMeetings: StationMeeting[];
+  retentionFlags: RetentionFlag[];
+  leaderAnalyses: LeaderAnalysis[];
+}
+
+// ── Station Meetings (Ananas Sheet 3) ──
+export interface StationMeeting {
+  id: string;
+  employeeName: string;
+  employeeEmail: string;
+  isManager: boolean;
+  managerName: string;
+  season: string;
+  meetingStatus: string;
+  submissionDate: string;
+  approvalDate: string;
+  strengths: string;
+  managerStrengthComments: string;
+  developmentAreas: string;
+  managerDevelopmentComments: string;
+  futureGoals: string;
+  managerGoalComments: string;
+  generalNotes: string;
+  managerGeneralNotes: string;
+  coreTasks: string;
+  projects: string;
+  learningDevelopment: string;
+  other: string;
+}
+
+// ── Non-Retention Records (Ananas Sheet 2) ──
+export interface RetentionFlag {
+  id: string;
+  employeeName: string;
+  directLeader: string;
+  generalTrack: string;
+  generalTrackPercent: number;
+  leadershipTrack: string;
+  retainEmployee: string;
+  department: string;
+  managerJustification: string;
+}
+
+// ── Leader Analysis (Leaders analysis sheet) ──
+export interface LeaderAnalysis {
+  leaderName: string;
+  strengths: string;
+  weaknesses: string;
+  recommendations: string;
+  idealTeam: string;
+  actionSteps: string;
+  comparison: string;
 }
 
 // ── Access Control ──
@@ -247,6 +302,8 @@ export interface UnifiedEmployee extends Employee {
   reviews: PerformanceReview[];
   leaderEvaluations: LeaderEvaluation[];       // as evaluatee
   leaderEvaluationsGiven: LeaderEvaluation[];   // as evaluator
+  stationMeetings: StationMeeting[];
+  retentionFlag?: RetentionFlag;
   matchConfidence: Record<string, number>;       // source → confidence 0-1
 }
 

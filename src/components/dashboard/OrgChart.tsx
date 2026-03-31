@@ -428,6 +428,7 @@ function EmployeeNode({
   isHighlighted,
   onHover,
   onLeave,
+  onClick,
 }: {
   emp: Employee;
   cx: number;
@@ -439,6 +440,7 @@ function EmployeeNode({
   isHighlighted: boolean;
   onHover: () => void;
   onLeave: () => void;
+  onClick?: () => void;
 }) {
   return (
     <motion.g
@@ -449,6 +451,7 @@ function EmployeeNode({
       style={{ cursor: 'pointer' }}
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
+      onClick={onClick}
     >
       {isSearchMatch && (
         <motion.circle
@@ -474,7 +477,7 @@ function EmployeeNode({
 }
 
 // ── Tooltip Component (HTML overlay) ──
-function Tooltip({ info, x, y, containerRef }: { info: { title: string; subtitle?: string; detail?: string; color: string }; x: number; y: number; containerRef: React.RefObject<HTMLDivElement | null> }) {
+function Tooltip({ info, x, y, containerRef }: { info: { title: string; subtitle?: string; detail?: string; color: string; link?: string }; x: number; y: number; containerRef: React.RefObject<HTMLDivElement | null> }) {
   const [pos, setPos] = useState({ left: 0, top: 0 });
 
   useEffect(() => {
@@ -507,6 +510,11 @@ function Tooltip({ info, x, y, containerRef }: { info: { title: string; subtitle
         <p className="font-ui font-black text-[13px] text-brand-black text-center">{info.title}</p>
         {info.subtitle && <p className="font-ui font-bold text-[11px] text-neutral-muted text-center">{info.subtitle}</p>}
         {info.detail && <p className="font-ui font-bold text-[10px] text-neutral-muted/70 text-center mt-0.5">{info.detail}</p>}
+        {info.link && (
+          <p className="font-ui font-black text-[10px] text-center mt-1" style={{ color: info.color }}>
+            {info.link}
+          </p>
+        )}
       </div>
     </motion.div>
   );
@@ -519,7 +527,7 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [selectedManager, setSelectedManager] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [hoveredNode, setHoveredNode] = useState<{ info: { title: string; subtitle?: string; detail?: string; color: string }; x: number; y: number } | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<{ info: { title: string; subtitle?: string; detail?: string; color: string; link?: string }; x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Build department data
@@ -645,7 +653,7 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
               isHighlighted={hoveredNode?.info.title === dept.name}
               isSearchMatch={isDeptSearchMatch}
               onHover={() => setHoveredNode({
-                info: { title: dept.name, subtitle: `${dept.count} موظف - ${dept.teams.size} فريق`, color },
+                info: { title: dept.name, subtitle: `${dept.count} موظف - ${dept.teams.size} فريق`, color, link: 'اضغط للفرق' },
                 x: pos.x, y: pos.y - r - 5,
               })}
               onLeave={() => setHoveredNode(null)}
@@ -694,6 +702,8 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+          style={{ cursor: 'pointer' }}
+          onClick={() => { window.location.href = `/departments?dept=${encodeURIComponent(dept.name)}`; }}
         >
           <circle cx={CENTER_X} cy={CENTER_Y} r={CENTER_R + 5} fill={color} opacity={0.12} />
           <circle cx={CENTER_X} cy={CENTER_Y} r={CENTER_R + 5} fill="none" stroke={color} strokeWidth={2.5} />
@@ -702,6 +712,9 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
           </text>
           <text x={CENTER_X} y={CENTER_Y + 10} textAnchor="middle" fill={color} fontSize={11} fontWeight={600} opacity={0.7} fontFamily="inherit">
             {dept.count} موظف
+          </text>
+          <text x={CENTER_X} y={CENTER_Y + 24} textAnchor="middle" fill={color} fontSize={9} fontWeight={600} opacity={0.5} fontFamily="inherit">
+            اضغط للتفاصيل
           </text>
         </motion.g>
 
@@ -732,6 +745,7 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
                     subtitle: `${members.length} موظف`,
                     detail: leaders.length > 0 ? `قائد: ${leaders[0].preferredName || leaders[0].name}` : undefined,
                     color,
+                    link: 'اضغط للأعضاء',
                   },
                   x: pos.x, y: pos.y - r - 5,
                 });
@@ -811,12 +825,13 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
                 info: {
                   title: emp.preferredName || emp.name,
                   subtitle: emp.jobTitleAr,
-                  detail: emp.isLeader ? 'قائد الفريق' : undefined,
+                  detail: emp.isLeader ? 'قائد الفريق — اضغط للملف الشخصي' : 'اضغط للملف الشخصي',
                   color,
                 },
                 x: pos.x, y: pos.y - empR - 5,
               })}
               onLeave={() => setHoveredNode(null)}
+              onClick={() => { window.location.href = `/employees/${emp.id}`; }}
             />
           );
         })}
@@ -880,6 +895,7 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
                   subtitle: node.employee.jobTitleAr,
                   detail: `${node.directReports.length} تابع · ${node.employee.department || ''}`,
                   color,
+                  link: 'اضغط للتوسيع',
                 },
                 x: pos.x, y: pos.y - r - 5,
               })}
@@ -970,6 +986,7 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
                   subtitle: emp.jobTitleAr,
                   detail: `${emp.department || ''}${reportCount > 0 ? ` · ${reportCount} تابع` : ''}`,
                   color: empColor,
+                  link: hasReports ? 'اضغط للتوسيع' : 'اضغط للملف الشخصي',
                 },
                 x: pos.x, y: pos.y - empR - 5,
               })}

@@ -3,6 +3,8 @@ import {
   Evaluation,
   PerformanceReview,
   LeaderEvaluation,
+  StationMeeting,
+  RetentionFlag,
   PlatformData,
   UnifiedEmployee,
   DataQualityReport,
@@ -152,6 +154,23 @@ export function buildUnifiedEmployeeMap(data: PlatformData): {
     }
   }
 
+  // Build email → employee name lookup for email-based matching
+  const empByEmail = new Map<string, string>(); // lowercase email → employee name
+  for (const emp of data.employees) {
+    if (emp.workEmail) {
+      const emailLower = emp.workEmail.trim().toLowerCase();
+      if (emailLower && !empByEmail.has(emailLower)) {
+        empByEmail.set(emailLower, emp.name);
+      }
+    }
+    if (emp.personalEmail) {
+      const emailLower = emp.personalEmail.trim().toLowerCase();
+      if (emailLower && !empByEmail.has(emailLower)) {
+        empByEmail.set(emailLower, emp.name);
+      }
+    }
+  }
+
   // Initialize unified map
   const unifiedMap = new Map<string, UnifiedEmployee>();
   for (const emp of data.employees) {
@@ -161,6 +180,7 @@ export function buildUnifiedEmployeeMap(data: PlatformData): {
       reviews: [],
       leaderEvaluations: [],
       leaderEvaluationsGiven: [],
+      stationMeetings: [],
       matchConfidence: {},
     });
   }
@@ -201,22 +221,46 @@ export function buildUnifiedEmployeeMap(data: PlatformData): {
   }
   report.unmatchedEvaluationNames = Array.from(unmatchedEvalSet);
 
-  // Link reviews → employees
+  // Link reviews → employees (try email match first, then fuzzy name match)
   const unmatchedRevSet = new Set<string>();
   for (const rev of data.reviews) {
     if (isGarbageRecord(rev.employeeName)) {
       report.garbageRemoved++;
       continue;
     }
-    const match = fuzzyMatchName(rev.employeeName, empByNormalized);
-    if (match) {
-      const unified = unifiedMap.get(match.match);
-      if (unified) {
-        unified.reviews.push(rev);
-        unified.matchConfidence[`rev-${rev.id}`] = match.confidence;
-        report.matchedReviews++;
+
+    let matched = false;
+
+    // Try email-based match first (confidence 1.0)
+    if (rev.employeeEmail) {
+      const emailLower = rev.employeeEmail.trim().toLowerCase();
+      const empName = empByEmail.get(emailLower);
+      if (empName) {
+        const unified = unifiedMap.get(empName);
+        if (unified) {
+          unified.reviews.push(rev);
+          unified.matchConfidence[`rev-${rev.id}`] = 1.0;
+          report.matchedReviews++;
+          matched = true;
+        }
       }
-    } else {
+    }
+
+    // Fall back to fuzzy name match
+    if (!matched) {
+      const match = fuzzyMatchName(rev.employeeName, empByNormalized);
+      if (match) {
+        const unified = unifiedMap.get(match.match);
+        if (unified) {
+          unified.reviews.push(rev);
+          unified.matchConfidence[`rev-${rev.id}`] = match.confidence;
+          report.matchedReviews++;
+          matched = true;
+        }
+      }
+    }
+
+    if (!matched) {
       unmatchedRevSet.add(rev.employeeName);
     }
   }
@@ -262,6 +306,57 @@ export function buildUnifiedEmployeeMap(data: PlatformData): {
   }
   report.unmatchedLeaderNames = Array.from(unmatchedLeaderSet);
 
+  // Link station meetings → employees (by email, then by name)
+  if (data.stationMeetings) {
+    for (const sm of data.stationMeetings) {
+      if (!sm.employeeName) continue;
+
+      let matched = false;
+
+      // Try email-based match first
+      if (sm.employeeEmail) {
+        const emailLower = sm.employeeEmail.trim().toLowerCase();
+        const empName = empByEmail.get(emailLower);
+        if (empName) {
+          const unified = unifiedMap.get(empName);
+          if (unified) {
+            unified.stationMeetings.push(sm);
+            unified.matchConfidence[`sm-${sm.id}`] = 1.0;
+            matched = true;
+          }
+        }
+      }
+
+      // Fall back to fuzzy name match
+      if (!matched) {
+        const match = fuzzyMatchName(sm.employeeName, empByNormalized);
+        if (match) {
+          const unified = unifiedMap.get(match.match);
+          if (unified) {
+            unified.stationMeetings.push(sm);
+            unified.matchConfidence[`sm-${sm.id}`] = match.confidence;
+          }
+        }
+      }
+    }
+  }
+
+  // Link retention flags → employees (by name)
+  if (data.retentionFlags) {
+    for (const rf of data.retentionFlags) {
+      if (!rf.employeeName) continue;
+
+      const match = fuzzyMatchName(rf.employeeName, empByNormalized);
+      if (match) {
+        const unified = unifiedMap.get(match.match);
+        if (unified) {
+          unified.retentionFlag = rf;
+          unified.matchConfidence[`rf-${rf.id}`] = match.confidence;
+        }
+      }
+    }
+  }
+
   return { unifiedMap, qualityReport: report };
 }
 
@@ -288,6 +383,9 @@ export function cleanPlatformData(data: PlatformData): CleanedData {
     evaluations: cleanEvals,
     reviews: cleanRevs,
     leaders: cleanLdrs,
+    stationMeetings: data.stationMeetings || [],
+    retentionFlags: data.retentionFlags || [],
+    leaderAnalyses: data.leaderAnalyses || [],
   };
 
   // Step 3: Build unified map with fuzzy matching

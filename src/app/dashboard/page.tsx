@@ -17,6 +17,8 @@ import {
   Target,
   ChevronLeft,
   ChevronRight,
+  Wand2,
+  Sparkles,
 } from 'lucide-react';
 import {
   BarChart,
@@ -50,8 +52,11 @@ const TRACK_COLORS: Record<string, string> = {
 
 export default function DashboardPage() {
   const [showUpload, setShowUpload] = useState(false);
-  const { data, hasData, isLoading } = useData();
+  const { data, cleanedData, qualityReport, hasData, isLoading } = useData();
   const [activeInsight, setActiveInsight] = useState(0);
+  const [magicDeptIndex, setMagicDeptIndex] = useState(0);
+
+  const activeData = cleanedData || data;
 
   const stats = useMemo(() => getOverallStats(data.employees, data.evaluations), [data.employees, data.evaluations]);
   const insights = useMemo(() => getEvaluationInsights(data.evaluations), [data.evaluations]);

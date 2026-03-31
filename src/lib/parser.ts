@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { Employee, Evaluation, PerformanceReview, LeaderEvaluation, FileType, ParseResult } from './types';
+import { Employee, Evaluation, PerformanceReview, LeaderEvaluation, StationMeeting, RetentionFlag, LeaderAnalysis, FileType, ParseResult } from './types';
 import { parseScoreFromText, parseTrafficLight, parseFinalDecision } from './scoring';
 
 // ── Column mappings ──
@@ -597,6 +597,327 @@ function parseLeaders(data: unknown[][]): LeaderEvaluation[] {
   return leaders;
 }
 
+// ── Station Meetings (Ananas Sheet 3: المحطة) ──
+
+function parseStationMeetings(data: unknown[][]): StationMeeting[] {
+  if (data.length < 2) return [];
+  const headers = data[0].map(h => String(h || '').trim());
+  const meetings: StationMeeting[] = [];
+
+  const col = (search: string) => findColumnIndex(headers, search);
+
+  const c = {
+    employeeName: col('اسم_الموظف'),
+    employeeEmail: col('البريد_الإلكتروني'),
+    isManager: col('مدير'),
+    managerName: col('اسم_المدير'),
+    season: col('اسم_الموسم'),
+    meetingStatus: col('حالة_اجتماع_المحطة'),
+    submissionDate: col('تاريخ_التقديم'),
+    approvalDate: col('تاريخ_الاعتماد'),
+    strengths: col('نواحي_القوة'),
+    managerStrengthComments: col('تعليق_المدير_نواحي_القوة'),
+    developmentAreas: col('نواحي_التطوير'),
+    managerDevelopmentComments: col('تعليق_المدير_نواحي_التطوير'),
+    futureGoals: col('الأهداف_المستقبلية'),
+    managerGoalComments: col('تعليق_المدير_الأهداف_المستقبلية'),
+    generalNotes: col('ملاحظات_عامة'),
+    managerGeneralNotes: col('تعليق_المدير_ملاحظات_عامة'),
+    coreTasks: col('المهام_الأساسية'),
+    projects: col('المشاريع'),
+    learningDevelopment: col('التعلم_والتطوير'),
+    other: col('أخرى'),
+  };
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row || row.length === 0) continue;
+
+    const employeeName = getCellValue(row, c.employeeName);
+    if (!employeeName) continue;
+
+    const isManagerVal = getCellValue(row, c.isManager);
+
+    meetings.push({
+      id: `sm-${i}`,
+      employeeName,
+      employeeEmail: getCellValue(row, c.employeeEmail),
+      isManager: isManagerVal === 'نعم' || isManagerVal === 'TRUE' || isManagerVal === 'true',
+      managerName: getCellValue(row, c.managerName),
+      season: getCellValue(row, c.season),
+      meetingStatus: getCellValue(row, c.meetingStatus),
+      submissionDate: getCellValue(row, c.submissionDate),
+      approvalDate: getCellValue(row, c.approvalDate),
+      strengths: getCellValue(row, c.strengths),
+      managerStrengthComments: getCellValue(row, c.managerStrengthComments),
+      developmentAreas: getCellValue(row, c.developmentAreas),
+      managerDevelopmentComments: getCellValue(row, c.managerDevelopmentComments),
+      futureGoals: getCellValue(row, c.futureGoals),
+      managerGoalComments: getCellValue(row, c.managerGoalComments),
+      generalNotes: getCellValue(row, c.generalNotes),
+      managerGeneralNotes: getCellValue(row, c.managerGeneralNotes),
+      coreTasks: getCellValue(row, c.coreTasks),
+      projects: getCellValue(row, c.projects),
+      learningDevelopment: getCellValue(row, c.learningDevelopment),
+      other: getCellValue(row, c.other),
+    });
+  }
+
+  return meetings;
+}
+
+// ── Retention Flags (Ananas Sheet 2: لن أتمسك فيه) ──
+
+function parseRetentionFlags(data: unknown[][]): RetentionFlag[] {
+  if (data.length < 2) return [];
+  const headers = data[0].map(h => String(h || '').trim());
+  const flags: RetentionFlag[] = [];
+
+  const col = (search: string) => findColumnIndex(headers, search);
+
+  const c = {
+    employeeName: col('اسم الموظف'),
+    directLeader: col('القائد المباشر'),
+    generalTrack: col('الدرب العام'),
+    generalTrackPercent: col('نسبة الدرب العام'),
+    leadershipTrack: col('درب القيادة'),
+    retainEmployee: col('هل تتمسك بالموظف'),
+    department: col('القسم'),
+    managerJustification: col('تبرير المدير'),
+  };
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row || row.length === 0) continue;
+
+    const employeeName = getCellValue(row, c.employeeName);
+    if (!employeeName) continue;
+
+    flags.push({
+      id: `rf-${i}`,
+      employeeName,
+      directLeader: getCellValue(row, c.directLeader),
+      generalTrack: parseTrackLabel(getCellValue(row, c.generalTrack)),
+      generalTrackPercent: parseFloat(getCellValue(row, c.generalTrackPercent)) || 0,
+      leadershipTrack: parseTrackLabel(getCellValue(row, c.leadershipTrack)),
+      retainEmployee: getCellValue(row, c.retainEmployee),
+      department: getCellValue(row, c.department),
+      managerJustification: getCellValue(row, c.managerJustification),
+    });
+  }
+
+  return flags;
+}
+
+// ── Leader Analysis (Leaders analysis sheet) ──
+
+function parseLeaderAnalyses(data: unknown[][]): LeaderAnalysis[] {
+  if (data.length < 2) return [];
+  const headers = data[0].map(h => String(h || '').trim());
+  const analyses: LeaderAnalysis[] = [];
+
+  // The analysis sheet may have varying column names; use positional fallback
+  // Typically: leaderName, strengths, weaknesses, recommendations, idealTeam, actionSteps, comparison
+  const col = (search: string) => findColumnIndex(headers, search);
+
+  // Try common Arabic header patterns
+  const c = {
+    leaderName: Math.max(col('القائد'), col('اسم القائد'), col('الاسم'), 0),
+    strengths: Math.max(col('نقاط القوة'), col('القوة'), 1),
+    weaknesses: Math.max(col('نقاط الضعف'), col('الضعف'), 2),
+    recommendations: Math.max(col('التوصيات'), col('توصيات'), 3),
+    idealTeam: Math.max(col('الفريق المثالي'), col('فريق'), 4),
+    actionSteps: Math.max(col('خطوات'), col('الإجراءات'), 5),
+    comparison: Math.max(col('المقارنة'), col('مقارنة'), 6),
+  };
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row || row.length === 0) continue;
+
+    const leaderName = getCellValue(row, c.leaderName);
+    if (!leaderName) continue;
+
+    analyses.push({
+      leaderName,
+      strengths: getCellValue(row, c.strengths),
+      weaknesses: getCellValue(row, c.weaknesses),
+      recommendations: getCellValue(row, c.recommendations),
+      idealTeam: getCellValue(row, c.idealTeam),
+      actionSteps: getCellValue(row, c.actionSteps),
+      comparison: getCellValue(row, c.comparison),
+    });
+  }
+
+  return analyses;
+}
+
+// ── Dec 2025 Leader Evaluations (1-9 scale, different format) ──
+
+function parseLeadersDec2025(data: unknown[][]): LeaderEvaluation[] {
+  if (data.length < 2) return [];
+  const leaders: LeaderEvaluation[] = [];
+
+  // Fixed column layout for Dec 2025 sheet:
+  // 0-2: Submission ID, Respondent ID, Submitted at
+  // 3-9: Checkbox consent fields (skip)
+  // 10: أنا (evaluator)
+  // 11: القائـد (leader)
+  // 12-14: communication, prioritization, decision making (1-9)
+  // 15: open feedback (clarity comments)
+  // 16-18: empowerment, availability, emotional intelligence (1-9)
+  // 19: open feedback (work method comments)
+  // 20-22: collaboration, performance culture, team involvement (1-9)
+  // 23: open feedback (team leadership comments)
+  // 24-26: appreciation, feedback, initiative (1-9)
+  // 27: open feedback (development comments)
+  // 28-30: general text fields
+
+  const SCALE_FACTOR = 10 / 9;
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row || row.length === 0) continue;
+
+    const leaderName = getCellValue(row, 11);
+    if (!leaderName) continue;
+
+    const getScore19 = (idx: number): number => {
+      const val = parseFloat(getCellValue(row, idx));
+      if (isNaN(val)) return 0;
+      return Math.round((val * SCALE_FACTOR) * 100) / 100;
+    };
+
+    const communication = getScore19(12);
+    const prioritization = getScore19(13);
+    const decisionMaking = getScore19(14);
+    const empowerment = getScore19(16);
+    const support = getScore19(17); // availability
+    const emotionalIntelligence = getScore19(18);
+    const collaboration = getScore19(20);
+    const environment = getScore19(21); // performance culture
+    const inclusion = getScore19(22); // team involvement
+    const development = getScore19(24); // appreciation
+    const feedback = getScore19(25);
+    const creativity = getScore19(26); // initiative
+
+    const allScores = [communication, prioritization, decisionMaking, empowerment, support,
+      emotionalIntelligence, collaboration, environment, inclusion, development, feedback, creativity];
+    const nonZero = allScores.filter(s => s > 0);
+    const averageScore = nonZero.length > 0 ? Math.round((nonZero.reduce((a, b) => a + b, 0) / nonZero.length) * 100) / 100 : 0;
+
+    leaders.push({
+      id: `ldr-dec-${i}`,
+      submissionId: getCellValue(row, 0),
+      submittedAt: getCellValue(row, 2),
+      evaluatorName: getCellValue(row, 10),
+      leaderName,
+      communication,
+      prioritization,
+      decisionMaking,
+      goalSetting: 0, // not in Dec 2025 format
+      clarityComments: getCellValue(row, 15),
+      empowerment,
+      delegation: 0, // not in Dec 2025 format
+      support,
+      emotionalIntelligence,
+      workMethodComments: getCellValue(row, 19),
+      morale: 0, // not in Dec 2025 format
+      collaboration,
+      environment,
+      inclusion,
+      teamLeadershipComments: getCellValue(row, 23),
+      development,
+      feedback,
+      performance: 0, // not in Dec 2025 format
+      creativity,
+      developmentComments: getCellValue(row, 27),
+      generalComments: getCellValue(row, 28),
+      hrComments: getCellValue(row, 29) || getCellValue(row, 30),
+      averageScore,
+    });
+  }
+
+  return leaders;
+}
+
+// ── Aug 2024 Leader Evaluations (same format as May 2025, strip team suffix) ──
+
+function parseLeadersAug2024(data: unknown[][]): LeaderEvaluation[] {
+  const leaders = parseLeaders(data);
+  // Strip team suffixes from leader names: "أسيل باعبدالله - فريق الإنتاج" → "أسيل باعبدالله"
+  for (const ldr of leaders) {
+    const dashIdx = ldr.leaderName.indexOf(' - ');
+    if (dashIdx > 0) {
+      ldr.leaderName = ldr.leaderName.substring(0, dashIdx).trim();
+    }
+    // Update ID prefix to distinguish from May 2025
+    ldr.id = ldr.id.replace('ldr-', 'ldr-aug-');
+  }
+  return leaders;
+}
+
+// ── Multi-sheet helpers ──
+
+function getSheetData(workbook: XLSX.WorkBook, sheetName: string): unknown[][] | null {
+  // Try exact match first
+  if (workbook.SheetNames.includes(sheetName)) {
+    const sheet = workbook.Sheets[sheetName];
+    return XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
+  }
+  // Try partial match (sheet names may be truncated)
+  const match = workbook.SheetNames.find(name => name.includes(sheetName) || sheetName.includes(name));
+  if (match) {
+    const sheet = workbook.Sheets[match];
+    return XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
+  }
+  return null;
+}
+
+function parseAdditionalReviewSheets(workbook: XLSX.WorkBook, result: ParseResult): void {
+  // Sheet 2: لن أتمسك فيه (retention flags)
+  const retentionData = getSheetData(workbook, 'لن أتمسك فيه');
+  if (retentionData && retentionData.length > 1) {
+    result.retentionFlags = parseRetentionFlags(retentionData);
+  }
+
+  // Sheet 3: المحطة (station meetings)
+  const stationData = getSheetData(workbook, 'المحطة');
+  if (stationData && stationData.length > 1) {
+    result.stationMeetings = parseStationMeetings(stationData);
+  }
+}
+
+function parseAdditionalLeaderSheets(workbook: XLSX.WorkBook, result: ParseResult): void {
+  // Aug 2024 adjusted sheet (same format as May 2025)
+  const aug2024Data = getSheetData(workbook, 'بعد تعديل المجاملين - أغسطس 202');
+  if (aug2024Data && aug2024Data.length > 1) {
+    const augLeaders = parseLeadersAug2024(aug2024Data);
+    if (result.leaders) {
+      result.leaders.push(...augLeaders);
+    } else {
+      result.leaders = augLeaders;
+    }
+  }
+
+  // Dec 2025 sheet (different format, 1-9 scale)
+  const dec2025Data = getSheetData(workbook, 'تقويم قيادة ثمانية - ديسمبر 202');
+  if (dec2025Data && dec2025Data.length > 1) {
+    const decLeaders = parseLeadersDec2025(dec2025Data);
+    if (result.leaders) {
+      result.leaders.push(...decLeaders);
+    } else {
+      result.leaders = decLeaders;
+    }
+  }
+
+  // Analysis sheet
+  const analysisData = getSheetData(workbook, 'تحليل تقييم 2025 - مايو');
+  if (analysisData && analysisData.length > 1) {
+    result.leaderAnalyses = parseLeaderAnalyses(analysisData);
+  }
+}
+
 export function parseBuffer(buffer: ArrayBuffer): ParseResult {
   try {
     // Detect if this is a CSV/text file (not XLSX/XLS which start with PK or other binary signatures)
@@ -636,18 +957,26 @@ export function parseBuffer(buffer: ArrayBuffer): ParseResult {
     const headers = actualData[0].map(h => String(h || ''));
     const fileType = detectFileType(headers);
 
+    let result: ParseResult;
     switch (fileType) {
       case 'employees':
-        return { type: 'employees', employees: parseEmployees(actualData) };
+        result = { type: 'employees', employees: parseEmployees(actualData) };
+        break;
       case 'evaluations':
-        return { type: 'evaluations', evaluations: parseEvaluations(actualData) };
+        result = { type: 'evaluations', evaluations: parseEvaluations(actualData) };
+        break;
       case 'reviews':
-        return { type: 'reviews', reviews: parseReviews(actualData) };
+        result = { type: 'reviews', reviews: parseReviews(actualData) };
+        parseAdditionalReviewSheets(workbook, result);
+        break;
       case 'leaders':
-        return { type: 'leaders', leaders: parseLeaders(actualData) };
+        result = { type: 'leaders', leaders: parseLeaders(actualData) };
+        parseAdditionalLeaderSheets(workbook, result);
+        break;
       default:
-        return { type: 'unknown', error: 'لم يتم التعرف على نوع الملف' };
+        result = { type: 'unknown', error: 'لم يتم التعرف على نوع الملف' };
     }
+    return result;
   } catch {
     return { type: 'unknown', error: 'خطأ في قراءة الملف' };
   }
@@ -681,18 +1010,26 @@ export async function parseFile(file: File): Promise<ParseResult> {
     const headers = actualData[0].map(h => String(h || ''));
     const fileType = detectFileType(headers);
 
+    let result: ParseResult;
     switch (fileType) {
       case 'employees':
-        return { type: 'employees', employees: parseEmployees(actualData) };
+        result = { type: 'employees', employees: parseEmployees(actualData) };
+        break;
       case 'evaluations':
-        return { type: 'evaluations', evaluations: parseEvaluations(actualData) };
+        result = { type: 'evaluations', evaluations: parseEvaluations(actualData) };
+        break;
       case 'reviews':
-        return { type: 'reviews', reviews: parseReviews(actualData) };
+        result = { type: 'reviews', reviews: parseReviews(actualData) };
+        parseAdditionalReviewSheets(workbook, result);
+        break;
       case 'leaders':
-        return { type: 'leaders', leaders: parseLeaders(actualData) };
+        result = { type: 'leaders', leaders: parseLeaders(actualData) };
+        parseAdditionalLeaderSheets(workbook, result);
+        break;
       default:
-        return { type: 'unknown', error: 'لم يتم التعرف على نوع الملف. تأكد من أن الملف يحتوي على البيانات الصحيحة.' };
+        result = { type: 'unknown', error: 'لم يتم التعرف على نوع الملف. تأكد من أن الملف يحتوي على البيانات الصحيحة.' };
     }
+    return result;
   } catch {
     return { type: 'unknown', error: 'حدث خطأ أثناء قراءة الملف. تأكد من صحة الملف.' };
   }

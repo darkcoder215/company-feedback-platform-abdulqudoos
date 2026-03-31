@@ -26,7 +26,7 @@ const DATA_FILES = [
 ];
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<PlatformData>({ employees: [], evaluations: [], reviews: [], leaders: [] });
+  const [data, setData] = useState<PlatformData>({ employees: [], evaluations: [], reviews: [], leaders: [], stationMeetings: [], retentionFlags: [], leaderAnalyses: [] });
   const [cleanedData, setCleanedData] = useState<CleanedData | null>(null);
   const [qualityReport, setQualityReport] = useState<DataQualityReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,7 +37,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     async function loadStaticData() {
-      const newData: PlatformData = { employees: [], evaluations: [], reviews: [], leaders: [] };
+      const newData: PlatformData = { employees: [], evaluations: [], reviews: [], leaders: [], stationMeetings: [], retentionFlags: [], leaderAnalyses: [] };
 
       for (const path of DATA_FILES) {
         try {
@@ -55,6 +55,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           } else if (result.type === 'leaders' && result.leaders) {
             newData.leaders.push(...result.leaders);
           }
+          if (result.stationMeetings) newData.stationMeetings.push(...result.stationMeetings);
+          if (result.retentionFlags) newData.retentionFlags.push(...result.retentionFlags);
+          if (result.leaderAnalyses) newData.leaderAnalyses.push(...result.leaderAnalyses);
         } catch {
           // Skip files that fail to load
         }
@@ -102,12 +105,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (result.type === 'reviews' && result.reviews) {
-        setData(prev => ({ ...prev, reviews: [...prev.reviews, ...result.reviews!] }));
+        setData(prev => ({
+          ...prev,
+          reviews: [...prev.reviews, ...result.reviews!],
+          stationMeetings: [...prev.stationMeetings, ...(result.stationMeetings || [])],
+          retentionFlags: [...prev.retentionFlags, ...(result.retentionFlags || [])],
+        }));
         return { type: 'reviews', count: result.reviews.length };
       }
 
       if (result.type === 'leaders' && result.leaders) {
-        setData(prev => ({ ...prev, leaders: [...prev.leaders, ...result.leaders!] }));
+        setData(prev => ({
+          ...prev,
+          leaders: [...prev.leaders, ...result.leaders!],
+          leaderAnalyses: [...prev.leaderAnalyses, ...(result.leaderAnalyses || [])],
+        }));
         return { type: 'leaders', count: result.leaders.length };
       }
 
@@ -119,7 +131,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const clearData = useCallback(() => {
-    setData({ employees: [], evaluations: [], reviews: [], leaders: [] });
+    setData({ employees: [], evaluations: [], reviews: [], leaders: [], stationMeetings: [], retentionFlags: [], leaderAnalyses: [] });
     setCleanedData(null);
     setQualityReport(null);
     setError(null);
