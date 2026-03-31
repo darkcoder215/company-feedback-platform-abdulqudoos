@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, ArrowRight, Users, Building2 } from 'lucide-react';
-import Link from 'next/link';
+import { Search, X, ArrowRight, Users, Building2, ChevronDown, ChevronUp, Crown, ExternalLink } from 'lucide-react';
 import type { Employee } from '@/lib/types';
 
 // ── Color palette for departments ──
@@ -48,87 +47,6 @@ function buildDeptData(employees: Employee[]): DeptData[] {
   }).sort((a, b) => b.count - a.count);
 }
 
-// ── Radial layout helpers ──
-function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
-  const rad = (angleDeg - 90) * (Math.PI / 180);
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-}
-
-// Scale bubble radius based on employee count
-function bubbleRadius(count: number, min: number, max: number, minR: number, maxR: number): number {
-  if (max === min) return (minR + maxR) / 2;
-  const t = (count - min) / (max - min);
-  return minR + t * (maxR - minR);
-}
-
-// Truncate text to fit inside a circle
-function truncateText(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text;
-  return text.slice(0, maxChars - 1) + '..';
-}
-
-// ── SVG Components ──
-
-function CenterBubble({ cx, cy, r, isActive }: { cx: number; cy: number; r: number; isActive: boolean }) {
-  return (
-    <motion.g
-      initial={{ scale: 0 }}
-      animate={{ scale: 1 }}
-      transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-    >
-      {/* Glow */}
-      <motion.circle
-        cx={cx} cy={cy} r={r + 6}
-        fill="none"
-        stroke="#0072F9"
-        strokeWidth={2}
-        strokeDasharray="6 4"
-        opacity={0.3}
-        animate={{ rotate: 360 }}
-        transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
-        style={{ transformOrigin: `${cx}px ${cy}px` }}
-      />
-      <circle cx={cx} cy={cy} r={r} fill="#0072F9" opacity={0.12} />
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#0072F9" strokeWidth={2.5} />
-      <text x={cx} y={cy - 8} textAnchor="middle" fill="#0072F9" fontSize={16} fontWeight={900} fontFamily="inherit">
-        ثمانية
-      </text>
-      <text x={cx} y={cy + 12} textAnchor="middle" fill="#0072F9" fontSize={11} fontWeight={600} opacity={0.7} fontFamily="inherit">
-        {isActive ? 'اضغط للعودة' : 'الهيكل التنظيمي'}
-      </text>
-    </motion.g>
-  );
-}
-
-function ConnectionLine({ x1, y1, x2, y2, color, delay = 0 }: { x1: number; y1: number; x2: number; y2: number; color: string; delay?: number }) {
-  return (
-    <motion.line
-      x1={x1} y1={y1} x2={x2} y2={y2}
-      stroke={color}
-      strokeWidth={1.5}
-      strokeDasharray="6 3"
-      opacity={0.35}
-      initial={{ pathLength: 0, opacity: 0 }}
-      animate={{ pathLength: 1, opacity: 0.35 }}
-      transition={{ duration: 0.6, delay }}
-    />
-  );
-}
-
-function SolidConnectionLine({ x1, y1, x2, y2, color, delay = 0 }: { x1: number; y1: number; x2: number; y2: number; color: string; delay?: number }) {
-  return (
-    <motion.line
-      x1={x1} y1={y1} x2={x2} y2={y2}
-      stroke={color}
-      strokeWidth={1.5}
-      opacity={0.45}
-      initial={{ pathLength: 0, opacity: 0 }}
-      animate={{ pathLength: 1, opacity: 0.45 }}
-      transition={{ duration: 0.6, delay }}
-    />
-  );
-}
-
 // ── People mode: manager hierarchy data ──
 interface ManagerNode {
   employee: Employee;
@@ -145,7 +63,6 @@ function buildManagerHierarchy(employees: Employee[]): {
     employeeByName.set(emp.name, emp);
   });
 
-  // Build direct reports map: managerName -> employees who report to them
   const directReportsMap = new Map<string, Employee[]>();
   employees.forEach(emp => {
     const mgr = emp.manager?.trim();
@@ -155,7 +72,6 @@ function buildManagerHierarchy(employees: Employee[]): {
     }
   });
 
-  // Build manager nodes for employees who have direct reports
   const managerMap = new Map<string, ManagerNode>();
   employees.forEach(emp => {
     const reports = directReportsMap.get(emp.name) || [];
@@ -164,7 +80,6 @@ function buildManagerHierarchy(employees: Employee[]): {
     }
   });
 
-  // Root managers: managers whose own manager is not in the employee list
   const rootManagers: ManagerNode[] = [];
   managerMap.forEach((node) => {
     const mgrName = node.employee.manager?.trim();
@@ -173,349 +88,380 @@ function buildManagerHierarchy(employees: Employee[]): {
     }
   });
 
-  // Also add employees with no manager who aren't in managerMap but have no manager at all
-  // (standalone top-level people who manage nobody but have no manager — skip these, they appear as leaf nodes)
-
-  // Sort root managers by number of reports descending
   rootManagers.sort((a, b) => b.directReports.length - a.directReports.length);
 
   return { rootManagers, managerMap, employeeByName };
 }
 
-function PersonBubble({
-  emp,
-  directReportCount,
-  cx,
-  cy,
-  r,
-  color,
-  delay,
-  isHighlighted,
-  isSearchMatch,
-  isManager,
-  onHover,
-  onLeave,
-  onClick,
-}: {
+function truncateText(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars - 1) + '..';
+}
+
+// ── Sub-components ──
+
+function EmployeeCard({ emp, color, onClick }: {
   emp: Employee;
-  directReportCount: number;
-  cx: number;
-  cy: number;
-  r: number;
   color: string;
-  delay: number;
-  isHighlighted: boolean;
-  isSearchMatch: boolean;
-  isManager: boolean;
-  onHover: () => void;
-  onLeave: () => void;
   onClick: () => void;
 }) {
-  const maxChars = Math.max(5, Math.floor(r / 4.5));
   const displayName = emp.preferredName || emp.name;
+  const years = emp.serviceYears;
+  const yearsText = years != null ? `${years.toFixed(1)} سنة` : '';
 
   return (
-    <motion.g
-      initial={{ scale: 0, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      exit={{ scale: 0, opacity: 0 }}
-      transition={{ type: 'spring', stiffness: 200, damping: 18, delay }}
-      style={{ cursor: 'pointer' }}
-      onMouseEnter={onHover}
-      onMouseLeave={onLeave}
+    <motion.button
+      layout
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      whileHover={{ scale: 1.03, boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
       onClick={onClick}
+      className="flex items-center gap-2 px-3 py-2 bg-white rounded-xl shadow-sm text-right cursor-pointer transition-shadow hover:shadow-md"
+      style={{ borderRight: `3px solid ${color}` }}
     >
-      {isSearchMatch && (
-        <motion.circle
-          cx={cx} cy={cy} r={r + 5}
-          fill="none"
-          stroke="#00C17A"
-          strokeWidth={2.5}
-          animate={{ r: [r + 5, r + 8, r + 5] }}
-          transition={{ duration: 1.5, repeat: Infinity }}
-        />
+      {emp.isLeader && <span className="text-sm shrink-0" title="قائد">⭐</span>}
+      <span className="font-ui font-bold text-[13px] text-brand-black truncate max-w-[120px]">
+        {truncateText(displayName, 16)}
+      </span>
+      {emp.jobTitleAr && (
+        <>
+          <span className="text-neutral-muted/40 text-[11px]">|</span>
+          <span className="font-ui font-bold text-[11px] text-neutral-muted truncate max-w-[120px]">
+            {truncateText(emp.jobTitleAr, 18)}
+          </span>
+        </>
       )}
-      {isHighlighted && !isSearchMatch && (
-        <motion.circle
-          cx={cx} cy={cy} r={r + 3}
-          fill="none"
-          stroke={color}
-          strokeWidth={1.5}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.5 }}
-        />
+      {yearsText && (
+        <>
+          <span className="text-neutral-muted/40 text-[11px]">|</span>
+          <span className="font-ui font-bold text-[10px] text-neutral-muted/70 shrink-0">
+            {yearsText}
+          </span>
+        </>
       )}
-      {/* Main bubble */}
-      <circle cx={cx} cy={cy} r={r} fill={color} opacity={0.15} />
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={isManager ? 2.5 : 1.5} />
-      {/* Name */}
-      <text x={cx} y={cy - (directReportCount > 0 ? 10 : 3)} textAnchor="middle" fill={color} fontSize={Math.min(11, r / 2.5)} fontWeight={800} fontFamily="inherit">
-        {truncateText(displayName, maxChars)}
-      </text>
-      {/* Job title */}
-      <text x={cx} y={cy + 3} textAnchor="middle" fill={color} fontSize={Math.min(8, r / 3.5)} fontWeight={500} opacity={0.7} fontFamily="inherit">
-        {truncateText(emp.jobTitleAr || '', Math.max(8, maxChars + 2))}
-      </text>
-      {/* Direct reports count */}
-      {directReportCount > 0 && (
-        <text x={cx} y={cy + 15} textAnchor="middle" fill={color} fontSize={Math.min(9, r / 3)} fontWeight={600} opacity={0.6} fontFamily="inherit">
-          {directReportCount} تابع
-        </text>
-      )}
-    </motion.g>
+    </motion.button>
   );
 }
 
-function DeptBubble({
-  dept,
-  cx,
-  cy,
-  r,
-  color,
-  delay,
-  isHighlighted,
-  isSearchMatch,
-  onHover,
-  onLeave,
-  onClick,
-}: {
-  dept: DeptData;
-  cx: number;
-  cy: number;
-  r: number;
+function LevelGroup({ level, employees, color, searchMatches }: {
+  level: number;
+  employees: Employee[];
   color: string;
-  delay: number;
-  isHighlighted: boolean;
-  isSearchMatch: boolean;
-  onHover: () => void;
-  onLeave: () => void;
-  onClick: () => void;
+  searchMatches: Set<string>;
 }) {
-  const maxChars = Math.max(6, Math.floor(r / 5));
+  const [showAll, setShowAll] = useState(false);
+  const MAX_VISIBLE = 20;
 
-  return (
-    <motion.g
-      initial={{ scale: 0, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      exit={{ scale: 0, opacity: 0 }}
-      transition={{ type: 'spring', stiffness: 180, damping: 20, delay }}
-      style={{ cursor: 'pointer' }}
-      onMouseEnter={onHover}
-      onMouseLeave={onLeave}
-      onClick={onClick}
-    >
-      {/* Search match ring */}
-      {isSearchMatch && (
-        <motion.circle
-          cx={cx} cy={cy} r={r + 6}
-          fill="none"
-          stroke="#00C17A"
-          strokeWidth={3}
-          animate={{ r: [r + 6, r + 10, r + 6] }}
-          transition={{ duration: 1.5, repeat: Infinity }}
-        />
-      )}
-      {/* Hover ring */}
-      {isHighlighted && !isSearchMatch && (
-        <motion.circle
-          cx={cx} cy={cy} r={r + 4}
-          fill="none"
-          stroke={color}
-          strokeWidth={2}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.5 }}
-        />
-      )}
-      {/* Main bubble */}
-      <circle cx={cx} cy={cy} r={r} fill={color} opacity={0.15} />
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={2} />
-      {/* Department name */}
-      <text x={cx} y={cy - 6} textAnchor="middle" fill={color} fontSize={Math.min(13, r / 2.5)} fontWeight={800} fontFamily="inherit">
-        {truncateText(dept.name, maxChars)}
-      </text>
-      {/* Count */}
-      <text x={cx} y={cy + 10} textAnchor="middle" fill={color} fontSize={Math.min(11, r / 3)} fontWeight={600} opacity={0.7} fontFamily="inherit">
-        {dept.count} موظف
-      </text>
-      {/* Teams count small text */}
-      <text x={cx} y={cy + 22} textAnchor="middle" fill={color} fontSize={Math.min(9, r / 4)} fontWeight={500} opacity={0.5} fontFamily="inherit">
-        {dept.teams.size} فريق
-      </text>
-    </motion.g>
-  );
-}
+  const filtered = searchMatches.size > 0
+    ? employees.filter(emp => searchMatches.has(emp.id))
+    : employees;
 
-function TeamBubble({
-  teamName,
-  members,
-  cx,
-  cy,
-  r,
-  color,
-  delay,
-  isHighlighted,
-  isSearchMatch,
-  onHover,
-  onLeave,
-  onClick,
-}: {
-  teamName: string;
-  members: Employee[];
-  cx: number;
-  cy: number;
-  r: number;
-  color: string;
-  delay: number;
-  isHighlighted: boolean;
-  isSearchMatch: boolean;
-  onHover: () => void;
-  onLeave: () => void;
-  onClick: () => void;
-}) {
-  const maxChars = Math.max(4, Math.floor(r / 5));
+  if (filtered.length === 0) return null;
 
-  return (
-    <motion.g
-      initial={{ scale: 0, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      exit={{ scale: 0, opacity: 0 }}
-      transition={{ type: 'spring', stiffness: 200, damping: 18, delay }}
-      style={{ cursor: 'pointer' }}
-      onMouseEnter={onHover}
-      onMouseLeave={onLeave}
-      onClick={onClick}
-    >
-      {isSearchMatch && (
-        <motion.circle
-          cx={cx} cy={cy} r={r + 4}
-          fill="none"
-          stroke="#00C17A"
-          strokeWidth={2.5}
-          animate={{ r: [r + 4, r + 7, r + 4] }}
-          transition={{ duration: 1.5, repeat: Infinity }}
-        />
-      )}
-      {isHighlighted && !isSearchMatch && (
-        <motion.circle
-          cx={cx} cy={cy} r={r + 3}
-          fill="none"
-          stroke={color}
-          strokeWidth={1.5}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.5 }}
-        />
-      )}
-      <circle cx={cx} cy={cy} r={r} fill={color} opacity={0.1} />
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={1.5} />
-      <text x={cx} y={cy - 4} textAnchor="middle" fill={color} fontSize={Math.min(11, r / 2.2)} fontWeight={700} fontFamily="inherit">
-        {truncateText(teamName, maxChars)}
-      </text>
-      <text x={cx} y={cy + 9} textAnchor="middle" fill={color} fontSize={Math.min(9, r / 2.8)} fontWeight={500} opacity={0.7} fontFamily="inherit">
-        {members.length}
-      </text>
-    </motion.g>
-  );
-}
-
-function EmployeeNode({
-  emp,
-  cx,
-  cy,
-  r,
-  color,
-  delay,
-  isSearchMatch,
-  isHighlighted,
-  onHover,
-  onLeave,
-  onClick,
-}: {
-  emp: Employee;
-  cx: number;
-  cy: number;
-  r: number;
-  color: string;
-  delay: number;
-  isSearchMatch: boolean;
-  isHighlighted: boolean;
-  onHover: () => void;
-  onLeave: () => void;
-  onClick?: () => void;
-}) {
-  return (
-    <motion.g
-      initial={{ scale: 0, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      exit={{ scale: 0, opacity: 0 }}
-      transition={{ type: 'spring', stiffness: 220, damping: 18, delay }}
-      style={{ cursor: 'pointer' }}
-      onMouseEnter={onHover}
-      onMouseLeave={onLeave}
-      onClick={onClick}
-    >
-      {isSearchMatch && (
-        <motion.circle
-          cx={cx} cy={cy} r={r + 3}
-          fill="none"
-          stroke="#00C17A"
-          strokeWidth={2}
-          animate={{ r: [r + 3, r + 6, r + 3] }}
-          transition={{ duration: 1.5, repeat: Infinity }}
-        />
-      )}
-      <circle cx={cx} cy={cy} r={r} fill={color} opacity={isHighlighted ? 0.35 : 0.2} />
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={isHighlighted ? 2 : 1} />
-      <text x={cx} y={cy + 1} textAnchor="middle" fill="white" fontSize={r * 0.85} fontWeight={800} fontFamily="inherit">
-        {emp.preferredName?.[0] || emp.name?.[0] || '?'}
-      </text>
-      {/* Name below the circle */}
-      <text x={cx} y={cy + r + 11} textAnchor="middle" fill={color} fontSize={8} fontWeight={600} opacity={0.8} fontFamily="inherit">
-        {truncateText(emp.preferredName || emp.name, 10)}
-      </text>
-    </motion.g>
-  );
-}
-
-// ── Tooltip Component (HTML overlay) ──
-function Tooltip({ info, x, y, containerRef }: { info: { title: string; subtitle?: string; detail?: string; color: string; link?: string }; x: number; y: number; containerRef: React.RefObject<HTMLDivElement | null> }) {
-  const [pos, setPos] = useState({ left: 0, top: 0 });
-
-  useEffect(() => {
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const svgEl = containerRef.current.querySelector('svg');
-      if (svgEl) {
-        const svgRect = svgEl.getBoundingClientRect();
-        const viewBox = svgEl.viewBox.baseVal;
-        const scaleX = svgRect.width / viewBox.width;
-        const scaleY = svgRect.height / viewBox.height;
-        setPos({
-          left: svgRect.left - rect.left + x * scaleX,
-          top: svgRect.top - rect.top + y * scaleY - 10,
-        });
-      }
-    }
-  }, [x, y, containerRef]);
+  const visible = showAll ? filtered : filtered.slice(0, MAX_VISIBLE);
+  const remaining = filtered.length - MAX_VISIBLE;
+  const levelLabel = level === 0 ? 'بدون مستوى' : `المستوى ${level}`;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 5 }}
+      layout
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.15 }}
-      className="absolute z-50 pointer-events-none"
-      style={{ left: pos.left, top: pos.top, transform: 'translate(-50%, -100%)' }}
+      transition={{ duration: 0.3 }}
+      className="mb-4"
     >
-      <div className="bg-white rounded-xl shadow-lg border-2 px-3 py-2 min-w-[120px]" style={{ borderColor: info.color }}>
-        <p className="font-ui font-black text-[13px] text-brand-black text-center">{info.title}</p>
-        {info.subtitle && <p className="font-ui font-bold text-[11px] text-neutral-muted text-center">{info.subtitle}</p>}
-        {info.detail && <p className="font-ui font-bold text-[10px] text-neutral-muted/70 text-center mt-0.5">{info.detail}</p>}
-        {info.link && (
-          <p className="font-ui font-black text-[10px] text-center mt-1" style={{ color: info.color }}>
-            {info.link}
-          </p>
+      <div className="flex items-center gap-2 mb-2">
+        <span
+          className="font-ui font-black text-[12px] px-2 py-0.5 rounded-md"
+          style={{ backgroundColor: color + '15', color }}
+        >
+          {levelLabel}
+        </span>
+        <span className="font-ui font-bold text-[11px] text-neutral-muted">
+          ({filtered.length} موظفين)
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {visible.map(emp => (
+          <EmployeeCard
+            key={emp.id}
+            emp={emp}
+            color={color}
+            onClick={() => { window.location.href = `/employees/${emp.id}`; }}
+          />
+        ))}
+        {!showAll && remaining > 0 && (
+          <motion.button
+            layout
+            onClick={() => setShowAll(true)}
+            className="flex items-center gap-1 px-3 py-2 bg-neutral-cream rounded-xl font-ui font-black text-[12px] text-neutral-muted hover:bg-brand-blue/10 hover:text-brand-blue transition-all"
+          >
+            +{remaining} آخرين
+            <ChevronDown className="w-3 h-3" />
+          </motion.button>
+        )}
+        {showAll && remaining > 0 && (
+          <motion.button
+            layout
+            onClick={() => setShowAll(false)}
+            className="flex items-center gap-1 px-3 py-2 bg-neutral-cream rounded-xl font-ui font-black text-[12px] text-neutral-muted hover:bg-brand-blue/10 hover:text-brand-blue transition-all"
+          >
+            عرض أقل
+            <ChevronUp className="w-3 h-3" />
+          </motion.button>
         )}
       </div>
+    </motion.div>
+  );
+}
+
+function DepartmentCard({ dept, color, isExpanded, onToggle, searchMatches }: {
+  dept: DeptData;
+  color: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+  searchMatches: Set<string>;
+}) {
+  const leaderCount = dept.employees.filter(e => e.isLeader).length;
+  const avgService = dept.employees.length > 0
+    ? (dept.employees.reduce((sum, e) => sum + (e.serviceYears || 0), 0) / dept.employees.length).toFixed(1)
+    : '0';
+
+  // Group employees by level
+  const levelGroups = useMemo(() => {
+    const groups = new Map<number, Employee[]>();
+    dept.employees.forEach(emp => {
+      const lvl = emp.level || 0;
+      if (!groups.has(lvl)) groups.set(lvl, []);
+      groups.get(lvl)!.push(emp);
+    });
+    return Array.from(groups.entries()).sort((a, b) => a[0] - b[0]);
+  }, [dept.employees]);
+
+  const onNavigate = useCallback(() => {
+    window.location.href = `/departments?dept=${encodeURIComponent(dept.name)}`;
+  }, [dept.name]);
+
+  return (
+    <motion.div
+      layout
+      className="bg-white rounded-2xl shadow-sm overflow-hidden"
+      style={{ borderTop: `3px solid ${color}` }}
+    >
+      {/* Collapsed card header */}
+      <motion.button
+        layout="position"
+        onClick={onToggle}
+        className="w-full text-right px-5 py-4 flex items-start justify-between gap-3 cursor-pointer hover:bg-neutral-cream/30 transition-colors"
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span
+              className="w-3 h-3 rounded-full shrink-0"
+              style={{ backgroundColor: color }}
+            />
+            <span className="font-ui font-black text-[15px] text-brand-black truncate">
+              {dept.name}
+            </span>
+          </div>
+          <div className="font-ui font-bold text-[12px] text-neutral-muted">
+            {dept.count} موظف · {dept.teams.size} فرق · {leaderCount} قائد
+          </div>
+          {!isExpanded && (
+            <div className="font-ui font-bold text-[11px] text-neutral-muted/70 mt-0.5">
+              متوسط الخدمة: {avgService} سنة
+            </div>
+          )}
+        </div>
+        <div className="shrink-0 mt-1">
+          {isExpanded ? (
+            <ChevronUp className="w-4 h-4 text-neutral-muted" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-neutral-muted" />
+          )}
+        </div>
+      </motion.button>
+
+      {/* Expanded content */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            layout
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            {/* Navigate to department detail link */}
+            <div className="px-5 pb-3 border-t border-neutral-cream pt-3">
+              <button
+                onClick={onNavigate}
+                className="flex items-center gap-1.5 font-ui font-black text-[12px] hover:underline transition-all mb-4"
+                style={{ color }}
+              >
+                اضغط للتفاصيل
+                <ExternalLink className="w-3 h-3" />
+              </button>
+
+              {/* Level groups */}
+              {levelGroups.map(([level, employees]) => (
+                <LevelGroup
+                  key={level}
+                  level={level}
+                  employees={employees}
+                  color={color}
+                  searchMatches={searchMatches}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+function ManagerCard({ node, managerMap, deptColors, depth, searchMatches, expandedManagers, toggleManager }: {
+  node: ManagerNode;
+  managerMap: Map<string, ManagerNode>;
+  deptColors: Record<string, string>;
+  depth: number;
+  searchMatches: Set<string>;
+  expandedManagers: Set<string>;
+  toggleManager: (name: string) => void;
+}) {
+  const emp = node.employee;
+  const color = deptColors[emp.department || 'بدون قسم'] || '#0072F9';
+  const displayName = emp.preferredName || emp.name;
+  const isExpanded = expandedManagers.has(emp.name);
+  const reports = node.directReports;
+
+  const isSearchRelevant = searchMatches.size === 0
+    || searchMatches.has(emp.id)
+    || searchMatches.has(`person:${emp.name}`)
+    || searchMatches.has(`manager:${emp.name}`)
+    || reports.some(r => searchMatches.has(r.id) || searchMatches.has(`person:${r.name}`));
+
+  if (!isSearchRelevant) return null;
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -10 }}
+      transition={{ duration: 0.25 }}
+      className="relative"
+      style={{ paddingRight: depth > 0 ? 24 : 0 }}
+    >
+      {/* Left border line for hierarchy */}
+      {depth > 0 && (
+        <div
+          className="absolute top-0 bottom-0 rounded-full"
+          style={{ right: depth > 0 ? 10 : 0, width: 2, backgroundColor: color + '30' }}
+        />
+      )}
+
+      {/* Manager card */}
+      <motion.div
+        layout="position"
+        className="bg-white rounded-2xl shadow-sm mb-2 overflow-hidden"
+        style={{ borderRight: `3px solid ${color}` }}
+      >
+        <button
+          onClick={() => toggleManager(emp.name)}
+          className="w-full text-right px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-neutral-cream/30 transition-colors"
+        >
+          <Crown className="w-4 h-4 shrink-0" style={{ color }} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-ui font-black text-[14px] text-brand-black truncate">
+                {displayName}
+              </span>
+              <span className="font-ui font-bold text-[11px] text-neutral-muted truncate">
+                {emp.jobTitleAr}
+              </span>
+            </div>
+            <div className="font-ui font-bold text-[11px] text-neutral-muted/70">
+              {reports.length} تابع · {emp.department || ''}
+            </div>
+          </div>
+          <div className="shrink-0">
+            {isExpanded ? (
+              <ChevronUp className="w-4 h-4 text-neutral-muted" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-neutral-muted" />
+            )}
+          </div>
+        </button>
+      </motion.div>
+
+      {/* Direct reports */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            layout
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-hidden"
+          >
+            <div className="pr-4 mb-2">
+              {reports.map(report => {
+                const reportNode = managerMap.get(report.name);
+                const reportColor = deptColors[report.department || 'بدون قسم'] || color;
+                const isReportSearchRelevant = searchMatches.size === 0
+                  || searchMatches.has(report.id)
+                  || searchMatches.has(`person:${report.name}`);
+
+                if (reportNode) {
+                  // This report is also a manager — recurse
+                  return (
+                    <ManagerCard
+                      key={report.id}
+                      node={reportNode}
+                      managerMap={managerMap}
+                      deptColors={deptColors}
+                      depth={depth + 1}
+                      searchMatches={searchMatches}
+                      expandedManagers={expandedManagers}
+                      toggleManager={toggleManager}
+                    />
+                  );
+                }
+
+                // Leaf employee
+                if (!isReportSearchRelevant) return null;
+                return (
+                  <motion.div
+                    key={report.id}
+                    layout
+                    initial={{ opacity: 0, x: -5 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -5 }}
+                    className="relative mb-1.5"
+                    style={{ paddingRight: 24 }}
+                  >
+                    <div
+                      className="absolute top-0 bottom-0 rounded-full"
+                      style={{ right: 10, width: 2, backgroundColor: reportColor + '20' }}
+                    />
+                    <EmployeeCard
+                      emp={report}
+                      color={reportColor}
+                      onClick={() => { window.location.href = `/employees/${report.id}`; }}
+                    />
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -523,19 +469,16 @@ function Tooltip({ info, x, y, containerRef }: { info: { title: string; subtitle
 // ── Main OrgChart Component ──
 export default function OrgChart({ employees }: { employees: Employee[] }) {
   const [viewMode, setViewMode] = useState<'departments' | 'people'>('departments');
-  const [selectedDept, setSelectedDept] = useState<string | null>(null);
-  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
-  const [selectedManager, setSelectedManager] = useState<string | null>(null);
+  const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set());
+  const [expandedManagers, setExpandedManagers] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
-  const [hoveredNode, setHoveredNode] = useState<{ info: { title: string; subtitle?: string; detail?: string; color: string; link?: string }; x: number; y: number } | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   // Build department data
   const departments = useMemo(() => buildDeptData(employees), [employees]);
   const deptColors = useMemo(() => getDeptColorMap(departments.map(d => d.name)), [departments]);
 
   // Build manager hierarchy for people mode
-  const { rootManagers, managerMap, employeeByName } = useMemo(() => buildManagerHierarchy(employees), [employees]);
+  const { rootManagers, managerMap } = useMemo(() => buildManagerHierarchy(employees), [employees]);
 
   // Search matching
   const searchMatches = useMemo(() => {
@@ -548,7 +491,6 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
         matches.add(emp.id);
         matches.add(`dept:${emp.department || 'بدون قسم'}`);
         matches.add(`team:${emp.department || 'بدون قسم'}:${emp.team || 'عام'}`);
-        // People mode: mark the employee's manager as a search match too
         if (emp.manager) {
           matches.add(`manager:${emp.manager}`);
         }
@@ -558,465 +500,53 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
     return matches;
   }, [searchQuery, employees]);
 
-  // Auto-navigate to department when searching
-  useEffect(() => {
-    if (searchMatches.size > 0 && viewMode === 'departments' && !selectedDept) {
-      for (const key of searchMatches) {
-        if (key.startsWith('dept:')) {
-          setSelectedDept(key.replace('dept:', ''));
-          break;
-        }
-      }
+  // Auto-expand departments/managers that have search matches
+  const filteredDepartments = useMemo(() => {
+    if (searchMatches.size === 0) return departments;
+    return departments.filter(dept => searchMatches.has(`dept:${dept.name}`));
+  }, [departments, searchMatches]);
+
+  // Auto-expand departments when searching
+  const effectiveExpandedDepts = useMemo(() => {
+    if (searchMatches.size > 0) {
+      const autoExpanded = new Set(expandedDepts);
+      filteredDepartments.forEach(dept => autoExpanded.add(dept.name));
+      return autoExpanded;
     }
-    if (searchMatches.size > 0 && viewMode === 'people' && !selectedManager) {
-      // Auto-navigate to the first matching manager
-      for (const key of searchMatches) {
+    return expandedDepts;
+  }, [expandedDepts, searchMatches, filteredDepartments]);
+
+  // Auto-expand managers when searching
+  const effectiveExpandedManagers = useMemo(() => {
+    if (searchMatches.size > 0) {
+      const autoExpanded = new Set(expandedManagers);
+      searchMatches.forEach(key => {
         if (key.startsWith('manager:')) {
-          const mgrName = key.replace('manager:', '');
-          if (managerMap.has(mgrName)) {
-            setSelectedManager(mgrName);
-            break;
-          }
+          autoExpanded.add(key.replace('manager:', ''));
         }
-      }
+      });
+      return autoExpanded;
     }
-  }, [searchMatches, selectedDept, selectedManager, viewMode, managerMap]);
+    return expandedManagers;
+  }, [expandedManagers, searchMatches]);
 
-  const handleBack = useCallback(() => {
-    if (viewMode === 'departments') {
-      if (selectedTeam) {
-        setSelectedTeam(null);
-      } else if (selectedDept) {
-        setSelectedDept(null);
-      }
-    } else {
-      if (selectedManager) {
-        setSelectedManager(null);
-      }
-    }
-  }, [viewMode, selectedDept, selectedTeam, selectedManager]);
+  const toggleDept = useCallback((name: string) => {
+    setExpandedDepts(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
 
-  // ── SVG dimensions ──
-  const SVG_W = 800;
-  const SVG_H = 600;
-  const CENTER_X = SVG_W / 2;
-  const CENTER_Y = SVG_H / 2;
-  const CENTER_R = 45;
-
-  // ── Overview: departments around center ──
-  const renderOverview = () => {
-    const counts = departments.map(d => d.count);
-    const minCount = Math.min(...counts);
-    const maxCount = Math.max(...counts);
-    const deptRadius = Math.min(SVG_W, SVG_H) * 0.32;
-    const minBubbleR = 35;
-    const maxBubbleR = 60;
-    const angleStep = 360 / departments.length;
-
-    return (
-      <>
-        {/* Connection lines */}
-        {departments.map((dept, i) => {
-          const angle = i * angleStep;
-          const pos = polarToCartesian(CENTER_X, CENTER_Y, deptRadius, angle);
-          return (
-            <ConnectionLine
-              key={`line-${dept.name}`}
-              x1={CENTER_X} y1={CENTER_Y}
-              x2={pos.x} y2={pos.y}
-              color={deptColors[dept.name]}
-              delay={i * 0.05}
-            />
-          );
-        })}
-
-        {/* Center */}
-        <CenterBubble cx={CENTER_X} cy={CENTER_Y} r={CENTER_R} isActive={false} />
-
-        {/* Department bubbles */}
-        {departments.map((dept, i) => {
-          const angle = i * angleStep;
-          const pos = polarToCartesian(CENTER_X, CENTER_Y, deptRadius, angle);
-          const r = bubbleRadius(dept.count, minCount, maxCount, minBubbleR, maxBubbleR);
-          const color = deptColors[dept.name];
-          const isDeptSearchMatch = searchMatches.has(`dept:${dept.name}`);
-
-          return (
-            <DeptBubble
-              key={dept.name}
-              dept={dept}
-              cx={pos.x}
-              cy={pos.y}
-              r={r}
-              color={color}
-              delay={0.1 + i * 0.06}
-              isHighlighted={hoveredNode?.info.title === dept.name}
-              isSearchMatch={isDeptSearchMatch}
-              onHover={() => setHoveredNode({
-                info: { title: dept.name, subtitle: `${dept.count} موظف - ${dept.teams.size} فريق`, color, link: 'اضغط للفرق' },
-                x: pos.x, y: pos.y - r - 5,
-              })}
-              onLeave={() => setHoveredNode(null)}
-              onClick={() => { setSelectedDept(dept.name); setHoveredNode(null); }}
-            />
-          );
-        })}
-      </>
-    );
-  };
-
-  // ── Department drill-down: teams around department center ──
-  const renderDepartmentView = () => {
-    const dept = departments.find(d => d.name === selectedDept);
-    if (!dept) return null;
-
-    const color = deptColors[dept.name];
-    const teamsArr = Array.from(dept.teams.entries()).sort((a, b) => b[1].length - a[1].length);
-    const teamCounts = teamsArr.map(([, m]) => m.length);
-    const minCount = Math.min(...teamCounts);
-    const maxCount = Math.max(...teamCounts);
-    const teamOrbitR = Math.min(SVG_W, SVG_H) * 0.3;
-    const minBubbleR = 28;
-    const maxBubbleR = 50;
-    const angleStep = 360 / teamsArr.length;
-
-    return (
-      <>
-        {/* Connection lines */}
-        {teamsArr.map(([teamName], i) => {
-          const angle = i * angleStep;
-          const pos = polarToCartesian(CENTER_X, CENTER_Y, teamOrbitR, angle);
-          return (
-            <ConnectionLine
-              key={`tline-${teamName}`}
-              x1={CENTER_X} y1={CENTER_Y}
-              x2={pos.x} y2={pos.y}
-              color={color}
-              delay={i * 0.05}
-            />
-          );
-        })}
-
-        {/* Department center */}
-        <motion.g
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-          style={{ cursor: 'pointer' }}
-          onClick={() => { window.location.href = `/departments?dept=${encodeURIComponent(dept.name)}`; }}
-        >
-          <circle cx={CENTER_X} cy={CENTER_Y} r={CENTER_R + 5} fill={color} opacity={0.12} />
-          <circle cx={CENTER_X} cy={CENTER_Y} r={CENTER_R + 5} fill="none" stroke={color} strokeWidth={2.5} />
-          <text x={CENTER_X} y={CENTER_Y - 8} textAnchor="middle" fill={color} fontSize={14} fontWeight={900} fontFamily="inherit">
-            {truncateText(dept.name, 12)}
-          </text>
-          <text x={CENTER_X} y={CENTER_Y + 10} textAnchor="middle" fill={color} fontSize={11} fontWeight={600} opacity={0.7} fontFamily="inherit">
-            {dept.count} موظف
-          </text>
-          <text x={CENTER_X} y={CENTER_Y + 24} textAnchor="middle" fill={color} fontSize={9} fontWeight={600} opacity={0.5} fontFamily="inherit">
-            اضغط للتفاصيل
-          </text>
-        </motion.g>
-
-        {/* Team bubbles */}
-        {teamsArr.map(([teamName, members], i) => {
-          const angle = i * angleStep;
-          const pos = polarToCartesian(CENTER_X, CENTER_Y, teamOrbitR, angle);
-          const r = bubbleRadius(members.length, minCount, maxCount, minBubbleR, maxBubbleR);
-          const isTeamSearchMatch = searchMatches.has(`team:${dept.name}:${teamName}`);
-
-          return (
-            <TeamBubble
-              key={teamName}
-              teamName={teamName}
-              members={members}
-              cx={pos.x}
-              cy={pos.y}
-              r={r}
-              color={color}
-              delay={0.1 + i * 0.05}
-              isHighlighted={hoveredNode?.info.title === teamName}
-              isSearchMatch={isTeamSearchMatch}
-              onHover={() => {
-                const leaders = members.filter(m => m.isLeader);
-                setHoveredNode({
-                  info: {
-                    title: teamName,
-                    subtitle: `${members.length} موظف`,
-                    detail: leaders.length > 0 ? `قائد: ${leaders[0].preferredName || leaders[0].name}` : undefined,
-                    color,
-                    link: 'اضغط للأعضاء',
-                  },
-                  x: pos.x, y: pos.y - r - 5,
-                });
-              }}
-              onLeave={() => setHoveredNode(null)}
-              onClick={() => { setSelectedTeam(teamName); setHoveredNode(null); }}
-            />
-          );
-        })}
-      </>
-    );
-  };
-
-  // ── Team drill-down: employees around team center ──
-  const renderTeamView = () => {
-    const dept = departments.find(d => d.name === selectedDept);
-    if (!dept) return null;
-    const members = dept.teams.get(selectedTeam!) || [];
-    if (members.length === 0) return null;
-
-    const color = deptColors[dept.name];
-    const empOrbitR = Math.min(SVG_W, SVG_H) * 0.28;
-    const empR = Math.max(12, Math.min(20, 200 / members.length));
-    const angleStep = 360 / members.length;
-
-    return (
-      <>
-        {/* Connection lines */}
-        {members.map((emp, i) => {
-          const angle = i * angleStep;
-          const pos = polarToCartesian(CENTER_X, CENTER_Y, empOrbitR, angle);
-          return (
-            <ConnectionLine
-              key={`eline-${emp.id}`}
-              x1={CENTER_X} y1={CENTER_Y}
-              x2={pos.x} y2={pos.y}
-              color={color}
-              delay={i * 0.03}
-            />
-          );
-        })}
-
-        {/* Team center */}
-        <motion.g
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-        >
-          <circle cx={CENTER_X} cy={CENTER_Y} r={40} fill={color} opacity={0.12} />
-          <circle cx={CENTER_X} cy={CENTER_Y} r={40} fill="none" stroke={color} strokeWidth={2} />
-          <text x={CENTER_X} y={CENTER_Y - 6} textAnchor="middle" fill={color} fontSize={13} fontWeight={800} fontFamily="inherit">
-            {truncateText(selectedTeam!, 10)}
-          </text>
-          <text x={CENTER_X} y={CENTER_Y + 10} textAnchor="middle" fill={color} fontSize={10} fontWeight={600} opacity={0.7} fontFamily="inherit">
-            {members.length} موظف
-          </text>
-        </motion.g>
-
-        {/* Employee nodes */}
-        {members.map((emp, i) => {
-          const angle = i * angleStep;
-          const pos = polarToCartesian(CENTER_X, CENTER_Y, empOrbitR, angle);
-          const isMatch = searchMatches.has(emp.id);
-
-          return (
-            <EmployeeNode
-              key={emp.id}
-              emp={emp}
-              cx={pos.x}
-              cy={pos.y}
-              r={empR}
-              color={color}
-              delay={0.08 + i * 0.03}
-              isSearchMatch={isMatch}
-              isHighlighted={hoveredNode?.info.title === emp.name}
-              onHover={() => setHoveredNode({
-                info: {
-                  title: emp.preferredName || emp.name,
-                  subtitle: emp.jobTitleAr,
-                  detail: emp.isLeader ? 'قائد الفريق — اضغط للملف الشخصي' : 'اضغط للملف الشخصي',
-                  color,
-                },
-                x: pos.x, y: pos.y - empR - 5,
-              })}
-              onLeave={() => setHoveredNode(null)}
-              onClick={() => { window.location.href = `/employees/${emp.id}`; }}
-            />
-          );
-        })}
-      </>
-    );
-  };
-
-  // ── People mode: Overview — root managers around center ──
-  const renderPeopleOverview = () => {
-    if (rootManagers.length === 0) return null;
-    const counts = rootManagers.map(m => m.directReports.length);
-    const minCount = Math.min(...counts);
-    const maxCount = Math.max(...counts);
-    const orbitR = Math.min(SVG_W, SVG_H) * 0.32;
-    const minBubbleR = 30;
-    const maxBubbleR = 55;
-    const angleStep = 360 / rootManagers.length;
-
-    return (
-      <>
-        {rootManagers.map((node, i) => {
-          const angle = i * angleStep;
-          const pos = polarToCartesian(CENTER_X, CENTER_Y, orbitR, angle);
-          const color = deptColors[node.employee.department || 'بدون قسم'] || '#0072F9';
-          return (
-            <SolidConnectionLine
-              key={`pline-${node.employee.name}`}
-              x1={CENTER_X} y1={CENTER_Y}
-              x2={pos.x} y2={pos.y}
-              color={color}
-              delay={i * 0.05}
-            />
-          );
-        })}
-
-        <CenterBubble cx={CENTER_X} cy={CENTER_Y} r={CENTER_R} isActive={false} />
-
-        {rootManagers.map((node, i) => {
-          const angle = i * angleStep;
-          const pos = polarToCartesian(CENTER_X, CENTER_Y, orbitR, angle);
-          const r = bubbleRadius(node.directReports.length, minCount, maxCount, minBubbleR, maxBubbleR);
-          const color = deptColors[node.employee.department || 'بدون قسم'] || '#0072F9';
-          const isMatch = searchMatches.has(`person:${node.employee.name}`) || searchMatches.has(`manager:${node.employee.name}`);
-
-          return (
-            <PersonBubble
-              key={node.employee.name}
-              emp={node.employee}
-              directReportCount={node.directReports.length}
-              cx={pos.x}
-              cy={pos.y}
-              r={r}
-              color={color}
-              delay={0.1 + i * 0.06}
-              isHighlighted={hoveredNode?.info.title === (node.employee.preferredName || node.employee.name)}
-              isSearchMatch={isMatch}
-              isManager={true}
-              onHover={() => setHoveredNode({
-                info: {
-                  title: node.employee.preferredName || node.employee.name,
-                  subtitle: node.employee.jobTitleAr,
-                  detail: `${node.directReports.length} تابع · ${node.employee.department || ''}`,
-                  color,
-                  link: 'اضغط للتوسيع',
-                },
-                x: pos.x, y: pos.y - r - 5,
-              })}
-              onLeave={() => setHoveredNode(null)}
-              onClick={() => { setSelectedManager(node.employee.name); setHoveredNode(null); }}
-            />
-          );
-        })}
-      </>
-    );
-  };
-
-  // ── People mode: Manager drill-down — direct reports around selected manager ──
-  const renderPersonView = () => {
-    const node = managerMap.get(selectedManager!);
-    if (!node) return null;
-
-    const mgr = node.employee;
-    const reports = node.directReports;
-    const color = deptColors[mgr.department || 'بدون قسم'] || '#0072F9';
-    const orbitR = Math.min(SVG_W, SVG_H) * 0.3;
-    const empR = Math.max(14, Math.min(28, 280 / reports.length));
-    const angleStep = 360 / reports.length;
-
-    return (
-      <>
-        {reports.map((emp, i) => {
-          const angle = i * angleStep;
-          const pos = polarToCartesian(CENTER_X, CENTER_Y, orbitR, angle);
-          const empColor = deptColors[emp.department || 'بدون قسم'] || color;
-          return (
-            <SolidConnectionLine
-              key={`prline-${emp.id}`}
-              x1={CENTER_X} y1={CENTER_Y}
-              x2={pos.x} y2={pos.y}
-              color={empColor}
-              delay={i * 0.04}
-            />
-          );
-        })}
-
-        {/* Manager center bubble */}
-        <motion.g
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-          style={{ cursor: 'pointer' }}
-          onClick={handleBack}
-        >
-          <circle cx={CENTER_X} cy={CENTER_Y} r={CENTER_R + 5} fill={color} opacity={0.12} />
-          <circle cx={CENTER_X} cy={CENTER_Y} r={CENTER_R + 5} fill="none" stroke={color} strokeWidth={2.5} />
-          <text x={CENTER_X} y={CENTER_Y - 12} textAnchor="middle" fill={color} fontSize={13} fontWeight={900} fontFamily="inherit">
-            {truncateText(mgr.preferredName || mgr.name, 12)}
-          </text>
-          <text x={CENTER_X} y={CENTER_Y + 4} textAnchor="middle" fill={color} fontSize={9} fontWeight={600} opacity={0.7} fontFamily="inherit">
-            {truncateText(mgr.jobTitleAr || '', 16)}
-          </text>
-          <text x={CENTER_X} y={CENTER_Y + 18} textAnchor="middle" fill={color} fontSize={9} fontWeight={600} opacity={0.5} fontFamily="inherit">
-            {reports.length} تابع
-          </text>
-        </motion.g>
-
-        {/* Direct report bubbles */}
-        {reports.map((emp, i) => {
-          const angle = i * angleStep;
-          const pos = polarToCartesian(CENTER_X, CENTER_Y, orbitR, angle);
-          const empColor = deptColors[emp.department || 'بدون قسم'] || color;
-          const isMatch = searchMatches.has(emp.id) || searchMatches.has(`person:${emp.name}`);
-          const hasReports = managerMap.has(emp.name);
-          const reportCount = managerMap.get(emp.name)?.directReports.length || 0;
-
-          return (
-            <PersonBubble
-              key={emp.id}
-              emp={emp}
-              directReportCount={reportCount}
-              cx={pos.x}
-              cy={pos.y}
-              r={empR}
-              color={empColor}
-              delay={0.08 + i * 0.04}
-              isHighlighted={hoveredNode?.info.title === (emp.preferredName || emp.name)}
-              isSearchMatch={isMatch}
-              isManager={hasReports}
-              onHover={() => setHoveredNode({
-                info: {
-                  title: emp.preferredName || emp.name,
-                  subtitle: emp.jobTitleAr,
-                  detail: `${emp.department || ''}${reportCount > 0 ? ` · ${reportCount} تابع` : ''}`,
-                  color: empColor,
-                  link: hasReports ? 'اضغط للتوسيع' : 'اضغط للملف الشخصي',
-                },
-                x: pos.x, y: pos.y - empR - 5,
-              })}
-              onLeave={() => setHoveredNode(null)}
-              onClick={() => {
-                setHoveredNode(null);
-                if (hasReports) {
-                  setSelectedManager(emp.name);
-                } else {
-                  // Leaf employee — navigate to profile
-                  window.location.href = `/employees/${emp.id}`;
-                }
-              }}
-            />
-          );
-        })}
-      </>
-    );
-  };
-
-  // Current breadcrumb label
-  const breadcrumb = useMemo(() => {
-    if (viewMode === 'people') {
-      if (selectedManager) return selectedManager;
-      return null;
-    }
-    if (selectedTeam && selectedDept) return `${selectedDept} / ${selectedTeam}`;
-    if (selectedDept) return selectedDept;
-    return null;
-  }, [viewMode, selectedDept, selectedTeam, selectedManager]);
+  const toggleManager = useCallback((name: string) => {
+    setExpandedManagers(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
 
   if (employees.length === 0) {
     return (
@@ -1028,24 +558,24 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
   }
 
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       {/* View mode toggle */}
       <div className="flex gap-1 bg-neutral-cream rounded-xl p-1 mb-3">
         <button
           className={`flex-1 px-4 py-2 rounded-lg font-ui font-black text-[13px] transition-all ${viewMode === 'departments' ? 'bg-white shadow-sm text-brand-black' : 'text-neutral-muted'}`}
-          onClick={() => { setViewMode('departments'); setSelectedManager(null); setSearchQuery(''); }}
+          onClick={() => { setViewMode('departments'); setSearchQuery(''); }}
         >
           <Building2 className="w-3.5 h-3.5 inline ml-1.5" /> الأقسام
         </button>
         <button
           className={`flex-1 px-4 py-2 rounded-lg font-ui font-black text-[13px] transition-all ${viewMode === 'people' ? 'bg-white shadow-sm text-brand-black' : 'text-neutral-muted'}`}
-          onClick={() => { setViewMode('people'); setSelectedDept(null); setSelectedTeam(null); setSearchQuery(''); }}
+          onClick={() => { setViewMode('people'); setSearchQuery(''); }}
         >
           <Users className="w-3.5 h-3.5 inline ml-1.5" /> الأشخاص
         </button>
       </div>
 
-      {/* Top bar: search + navigation */}
+      {/* Top bar: search + stats */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
         {/* Search */}
         <div className="relative flex-1 w-full sm:max-w-xs">
@@ -1059,7 +589,7 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
           />
           {searchQuery && (
             <button
-              onClick={() => { setSearchQuery(''); }}
+              onClick={() => setSearchQuery('')}
               className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-muted hover:text-brand-red transition-colors"
             >
               <X className="w-3.5 h-3.5" />
@@ -1073,22 +603,6 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
           <span className="text-neutral-warm-gray">|</span>
           <span>{employees.length} موظف</span>
         </div>
-
-        {/* Back button */}
-        <AnimatePresence>
-          {breadcrumb && (
-            <motion.button
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -10 }}
-              onClick={handleBack}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neutral-cream font-ui font-black text-[12px] text-neutral-muted hover:bg-brand-blue/10 hover:text-brand-blue transition-all"
-            >
-              <ArrowRight className="w-3.5 h-3.5" />
-              رجوع
-            </motion.button>
-          )}
-        </AnimatePresence>
       </div>
 
       {/* Search results indicator */}
@@ -1104,7 +618,7 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
               <Search className="w-3.5 h-3.5 text-brand-green" />
               <span className="font-ui font-bold text-[12px] text-brand-green">
                 {searchMatches.size > 0
-                  ? `تم العثور على نتائج`
+                  ? 'تم العثور على نتائج'
                   : 'لا توجد نتائج'}
               </span>
             </div>
@@ -1112,96 +626,87 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
         )}
       </AnimatePresence>
 
-      {/* Breadcrumb */}
-      {breadcrumb && (
-        <div className="mb-2 flex items-center gap-2">
-          <button onClick={() => { setSelectedDept(null); setSelectedTeam(null); setSelectedManager(null); }} className="font-ui font-bold text-[12px] text-brand-blue hover:underline">
-            ثمانية
-          </button>
-          <span className="text-neutral-muted text-[12px]">/</span>
-          {viewMode === 'departments' && selectedDept && (
-            <button
-              onClick={() => { setSelectedTeam(null); }}
-              className={`font-ui font-bold text-[12px] ${selectedTeam ? 'text-brand-blue hover:underline' : 'text-brand-black'}`}
+      {/* ── Departments Mode ── */}
+      {viewMode === 'departments' && (
+        <motion.div
+          layout
+          className="grid grid-cols-1 gap-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          {filteredDepartments.map((dept, i) => (
+            <motion.div
+              key={dept.name}
+              layout
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.04, duration: 0.3 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
             >
-              {selectedDept}
-            </button>
+              <DepartmentCard
+                dept={dept}
+                color={deptColors[dept.name]}
+                isExpanded={effectiveExpandedDepts.has(dept.name)}
+                onToggle={() => toggleDept(dept.name)}
+                searchMatches={searchMatches}
+              />
+            </motion.div>
+          ))}
+          {filteredDepartments.length === 0 && searchQuery.trim() && (
+            <div className="text-center py-8">
+              <p className="font-ui font-bold text-[13px] text-neutral-muted">لا توجد أقسام مطابقة</p>
+            </div>
           )}
-          {viewMode === 'departments' && selectedTeam && (
-            <>
-              <span className="text-neutral-muted text-[12px]">/</span>
-              <span className="font-ui font-bold text-[12px] text-brand-black">{selectedTeam}</span>
-            </>
-          )}
-          {viewMode === 'people' && selectedManager && (
-            <span className="font-ui font-bold text-[12px] text-brand-black">{selectedManager}</span>
-          )}
-        </div>
+        </motion.div>
       )}
 
-      {/* SVG Visualization */}
-      <div className="relative bg-neutral-cream/30 rounded-2xl border-2 border-neutral-cream overflow-hidden">
-        <svg
-          viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-          className="w-full"
-          style={{ minHeight: 400, maxHeight: 600 }}
+      {/* ── People Mode ── */}
+      {viewMode === 'people' && (
+        <motion.div
+          layout
+          className="space-y-2"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
         >
-          {/* Background pattern */}
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <circle cx="20" cy="20" r="0.5" fill="#94a3b8" opacity="0.2" />
-            </pattern>
-          </defs>
-          <rect width={SVG_W} height={SVG_H} fill="url(#grid)" />
-
-          <AnimatePresence mode="wait">
-            {viewMode === 'departments' && !selectedDept && (
-              <motion.g key="overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
-                {renderOverview()}
-              </motion.g>
-            )}
-            {viewMode === 'departments' && selectedDept && !selectedTeam && (
-              <motion.g key={`dept-${selectedDept}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
-                {renderDepartmentView()}
-              </motion.g>
-            )}
-            {viewMode === 'departments' && selectedDept && selectedTeam && (
-              <motion.g key={`team-${selectedTeam}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
-                {renderTeamView()}
-              </motion.g>
-            )}
-            {viewMode === 'people' && !selectedManager && (
-              <motion.g key="people-overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
-                {renderPeopleOverview()}
-              </motion.g>
-            )}
-            {viewMode === 'people' && selectedManager && (
-              <motion.g key={`person-${selectedManager}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
-                {renderPersonView()}
-              </motion.g>
-            )}
-          </AnimatePresence>
-        </svg>
-
-        {/* Tooltip overlay */}
-        <AnimatePresence>
-          {hoveredNode && (
-            <Tooltip
-              info={hoveredNode.info}
-              x={hoveredNode.x}
-              y={hoveredNode.y}
-              containerRef={containerRef}
-            />
+          {rootManagers.length === 0 && (
+            <div className="text-center py-8">
+              <p className="font-ui font-bold text-[13px] text-neutral-muted">لا توجد بيانات التسلسل الإداري</p>
+            </div>
           )}
-        </AnimatePresence>
-      </div>
+          <AnimatePresence>
+            {rootManagers.map((node, i) => (
+              <motion.div
+                key={node.employee.name}
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05, duration: 0.3 }}
+                whileInView={{ opacity: 1 }}
+                viewport={{ once: true }}
+              >
+                <ManagerCard
+                  node={node}
+                  managerMap={managerMap}
+                  deptColors={deptColors}
+                  depth={0}
+                  searchMatches={searchMatches}
+                  expandedManagers={effectiveExpandedManagers}
+                  toggleManager={toggleManager}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </motion.div>
+      )}
 
       {/* Legend */}
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         {viewMode === 'departments' && departments.map(dept => (
           <button
             key={dept.name}
-            onClick={() => { setSelectedDept(dept.name); setSelectedTeam(null); }}
+            onClick={() => toggleDept(dept.name)}
             className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-neutral-cream hover:border-brand-blue/30 transition-all"
           >
             <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: deptColors[dept.name] }} />
@@ -1212,7 +717,7 @@ export default function OrgChart({ employees }: { employees: Employee[] }) {
         {viewMode === 'people' && rootManagers.map(node => (
           <button
             key={node.employee.name}
-            onClick={() => { setSelectedManager(node.employee.name); }}
+            onClick={() => toggleManager(node.employee.name)}
             className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-neutral-cream hover:border-brand-blue/30 transition-all"
           >
             <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: deptColors[node.employee.department || 'بدون قسم'] || '#0072F9' }} />
